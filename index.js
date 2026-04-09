@@ -213,13 +213,15 @@ class TwentyCRMServer {
           // Notes Management
           {
             name: "create_note",
-            description: "Create a new note in Twenty CRM",
+            description: "Create a new note in Twenty CRM. Optionally link it to persons/companies by providing target IDs — noteTarget records are created automatically.",
             inputSchema: {
               type: "object",
               properties: {
                 title: { type: "string", description: "Note title" },
                 body: { type: "string", description: "Note content" },
-                position: { type: "number", description: "Position for ordering" }
+                position: { type: "number", description: "Position for ordering" },
+                targetPersonIds: { type: "array", items: { type: "string" }, description: "Person IDs to link this note to (auto-creates noteTarget records)" },
+                targetCompanyIds: { type: "array", items: { type: "string" }, description: "Company IDs to link this note to (auto-creates noteTarget records)" }
               },
               required: ["title", "body"]
             }
@@ -276,7 +278,7 @@ class TwentyCRMServer {
           // Tasks Management
           {
             name: "create_task",
-            description: "Create a new task in Twenty CRM",
+            description: "Create a new task in Twenty CRM. Optionally link it to persons/companies by providing target IDs — taskTarget records are created automatically.",
             inputSchema: {
               type: "object",
               properties: {
@@ -285,7 +287,9 @@ class TwentyCRMServer {
                 dueAt: { type: "string", description: "Due date (ISO 8601 format)" },
                 status: { type: "string", description: "Task status", enum: ["TODO", "IN_PROGRESS", "DONE"] },
                 assigneeId: { type: "string", description: "ID of person assigned to task" },
-                position: { type: "number", description: "Position for ordering" }
+                position: { type: "number", description: "Position for ordering" },
+                targetPersonIds: { type: "array", items: { type: "string" }, description: "Person IDs to link this task to (auto-creates taskTarget records)" },
+                targetCompanyIds: { type: "array", items: { type: "string" }, description: "Company IDs to link this task to (auto-creates taskTarget records)" }
               },
               required: ["title"]
             }
@@ -342,6 +346,110 @@ class TwentyCRMServer {
             }
           },
 
+          // Note Target Management
+          {
+            name: "create_note_target",
+            description: "Link a note to a person, company, or opportunity",
+            inputSchema: {
+              type: "object",
+              properties: {
+                noteId: { type: "string", description: "Note ID" },
+                targetPersonId: { type: "string", description: "Person ID to link" },
+                targetCompanyId: { type: "string", description: "Company ID to link" },
+                targetOpportunityId: { type: "string", description: "Opportunity ID to link" }
+              },
+              required: ["noteId"]
+            }
+          },
+          {
+            name: "list_note_targets",
+            description: "List all targets (persons/companies) linked to a note",
+            inputSchema: {
+              type: "object",
+              properties: {
+                noteId: { type: "string", description: "Note ID to list targets for" },
+                limit: { type: "number", description: "Number of results (default: 50)" }
+              },
+              required: ["noteId"]
+            }
+          },
+          {
+            name: "delete_note_target",
+            description: "Remove a link between a note and a target",
+            inputSchema: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "Note target ID to delete" }
+              },
+              required: ["id"]
+            }
+          },
+
+          // Task Target Management
+          {
+            name: "create_task_target",
+            description: "Link a task to a person, company, or opportunity",
+            inputSchema: {
+              type: "object",
+              properties: {
+                taskId: { type: "string", description: "Task ID" },
+                targetPersonId: { type: "string", description: "Person ID to link" },
+                targetCompanyId: { type: "string", description: "Company ID to link" },
+                targetOpportunityId: { type: "string", description: "Opportunity ID to link" }
+              },
+              required: ["taskId"]
+            }
+          },
+          {
+            name: "list_task_targets",
+            description: "List all targets (persons/companies) linked to a task",
+            inputSchema: {
+              type: "object",
+              properties: {
+                taskId: { type: "string", description: "Task ID to list targets for" },
+                limit: { type: "number", description: "Number of results (default: 50)" }
+              },
+              required: ["taskId"]
+            }
+          },
+          {
+            name: "delete_task_target",
+            description: "Remove a link between a task and a target",
+            inputSchema: {
+              type: "object",
+              properties: {
+                id: { type: "string", description: "Task target ID to delete" }
+              },
+              required: ["id"]
+            }
+          },
+
+          // Convenience Lookup Tools
+          {
+            name: "list_notes_for_person",
+            description: "List all notes linked to a specific person (via noteTargets)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                personId: { type: "string", description: "Person ID" },
+                limit: { type: "number", description: "Number of results (default: 50)" }
+              },
+              required: ["personId"]
+            }
+          },
+          {
+            name: "list_tasks_for_person",
+            description: "List all tasks linked to a specific person (via taskTargets)",
+            inputSchema: {
+              type: "object",
+              properties: {
+                personId: { type: "string", description: "Person ID" },
+                limit: { type: "number", description: "Number of results (default: 50)" }
+              },
+              required: ["personId"]
+            }
+          },
+
           // Metadata Operations
           {
             name: "get_metadata_objects",
@@ -353,11 +461,11 @@ class TwentyCRMServer {
           },
           {
             name: "get_object_metadata",
-            description: "Get metadata for a specific object type",
+            description: "Get metadata for a specific object type. Accepts either a UUID or a name string (e.g., 'note', 'person', 'noteTarget').",
             inputSchema: {
               type: "object",
               properties: {
-                objectName: { type: "string", description: "Object name (e.g., 'people', 'companies')" }
+                objectName: { type: "string", description: "Object name (e.g., 'note', 'person', 'company', 'noteTarget') or metadata object UUID" }
               },
               required: ["objectName"]
             }
@@ -437,6 +545,28 @@ class TwentyCRMServer {
             return await this.updateTask(args);
           case "delete_task":
             return await this.deleteTask(args.id);
+
+          // Note target operations
+          case "create_note_target":
+            return await this.createNoteTarget(args);
+          case "list_note_targets":
+            return await this.listNoteTargets(args);
+          case "delete_note_target":
+            return await this.deleteNoteTarget(args.id);
+
+          // Task target operations
+          case "create_task_target":
+            return await this.createTaskTarget(args);
+          case "list_task_targets":
+            return await this.listTaskTargets(args);
+          case "delete_task_target":
+            return await this.deleteTaskTarget(args.id);
+
+          // Convenience lookups
+          case "list_notes_for_person":
+            return await this.listNotesForPerson(args);
+          case "list_tasks_for_person":
+            return await this.listTasksForPerson(args);
 
           // Metadata operations
           case "get_metadata_objects":
@@ -733,15 +863,47 @@ class TwentyCRMServer {
     return transformed;
   }
 
+  // Helper: create targets for a note or task
+  async createTargetsForRecord(type, recordId, targetPersonIds = [], targetCompanyIds = []) {
+    const endpoint = type === "note" ? "/rest/noteTargets" : "/rest/taskTargets";
+    const idField = type === "note" ? "noteId" : "taskId";
+    const created = [];
+
+    for (const personId of targetPersonIds) {
+      const target = await this.makeRequest(endpoint, "POST", {
+        [idField]: recordId,
+        targetPersonId: personId,
+      });
+      created.push(target);
+    }
+    for (const companyId of targetCompanyIds) {
+      const target = await this.makeRequest(endpoint, "POST", {
+        [idField]: recordId,
+        targetCompanyId: companyId,
+      });
+      created.push(target);
+    }
+    return created;
+  }
+
   // Note methods
   async createNote(data) {
-    const transformed = this.transformBodyField(data);
+    const { targetPersonIds, targetCompanyIds, ...noteData } = data;
+    const transformed = this.transformBodyField(noteData);
     const result = await this.makeRequest("/rest/notes", "POST", transformed);
+
+    // Auto-create noteTarget records if target IDs provided
+    const noteId = result?.data?.createNote?.id;
+    let targets = [];
+    if (noteId && (targetPersonIds?.length || targetCompanyIds?.length)) {
+      targets = await this.createTargetsForRecord("note", noteId, targetPersonIds, targetCompanyIds);
+    }
+
     return {
       content: [
         {
           type: "text",
-          text: `Created note: ${JSON.stringify(result, null, 2)}`
+          text: `Created note: ${JSON.stringify(result, null, 2)}${targets.length ? `\n\nCreated ${targets.length} noteTarget(s): ${JSON.stringify(targets, null, 2)}` : ""}`
         }
       ]
     };
@@ -806,13 +968,22 @@ class TwentyCRMServer {
 
   // Task methods
   async createTask(data) {
-    const transformed = this.transformBodyField(data);
+    const { targetPersonIds, targetCompanyIds, ...taskData } = data;
+    const transformed = this.transformBodyField(taskData);
     const result = await this.makeRequest("/rest/tasks", "POST", transformed);
+
+    // Auto-create taskTarget records if target IDs provided
+    const taskId = result?.data?.createTask?.id;
+    let targets = [];
+    if (taskId && (targetPersonIds?.length || targetCompanyIds?.length)) {
+      targets = await this.createTargetsForRecord("task", taskId, targetPersonIds, targetCompanyIds);
+    }
+
     return {
       content: [
         {
           type: "text",
-          text: `Created task: ${JSON.stringify(result, null, 2)}`
+          text: `Created task: ${JSON.stringify(result, null, 2)}${targets.length ? `\n\nCreated ${targets.length} taskTarget(s): ${JSON.stringify(targets, null, 2)}` : ""}`
         }
       ]
     };
@@ -878,6 +1049,110 @@ class TwentyCRMServer {
     };
   }
 
+  // Note Target methods
+  async createNoteTarget(data) {
+    const result = await this.makeRequest("/rest/noteTargets", "POST", data);
+    return {
+      content: [{ type: "text", text: `Created noteTarget: ${JSON.stringify(result, null, 2)}` }]
+    };
+  }
+
+  async listNoteTargets(params) {
+    const { noteId, limit = 50 } = params;
+    const filter = encodeURIComponent(`noteId[eq]:${noteId}`);
+    const endpoint = `/rest/noteTargets?filter=${filter}&limit=${limit}`;
+    const result = await this.makeRequest(endpoint);
+    return {
+      content: [{ type: "text", text: `Note targets: ${JSON.stringify(result, null, 2)}` }]
+    };
+  }
+
+  async deleteNoteTarget(id) {
+    await this.makeRequest(`/rest/noteTargets/${id}`, "DELETE");
+    return {
+      content: [{ type: "text", text: `Successfully deleted noteTarget with ID: ${id}` }]
+    };
+  }
+
+  // Task Target methods
+  async createTaskTarget(data) {
+    const result = await this.makeRequest("/rest/taskTargets", "POST", data);
+    return {
+      content: [{ type: "text", text: `Created taskTarget: ${JSON.stringify(result, null, 2)}` }]
+    };
+  }
+
+  async listTaskTargets(params) {
+    const { taskId, limit = 50 } = params;
+    const filter = encodeURIComponent(`taskId[eq]:${taskId}`);
+    const endpoint = `/rest/taskTargets?filter=${filter}&limit=${limit}`;
+    const result = await this.makeRequest(endpoint);
+    return {
+      content: [{ type: "text", text: `Task targets: ${JSON.stringify(result, null, 2)}` }]
+    };
+  }
+
+  async deleteTaskTarget(id) {
+    await this.makeRequest(`/rest/taskTargets/${id}`, "DELETE");
+    return {
+      content: [{ type: "text", text: `Successfully deleted taskTarget with ID: ${id}` }]
+    };
+  }
+
+  // Convenience lookup methods
+  async listNotesForPerson(params) {
+    const { personId, limit = 50 } = params;
+    // Get noteTargets for this person, then fetch the linked notes
+    const filter = encodeURIComponent(`targetPersonId[eq]:${personId}`);
+    const targetsEndpoint = `/rest/noteTargets?filter=${filter}&limit=${limit}`;
+    const targetsResult = await this.makeRequest(targetsEndpoint);
+    const targets = targetsResult?.data?.noteTargets || [];
+
+    if (targets.length === 0) {
+      return { content: [{ type: "text", text: `No notes found for person ${personId}` }] };
+    }
+
+    const notes = [];
+    for (const target of targets) {
+      try {
+        const note = await this.makeRequest(`/rest/notes/${target.noteId}`);
+        notes.push({ ...note?.data?.getNote || note, noteTargetId: target.id });
+      } catch (e) {
+        notes.push({ noteId: target.noteId, error: e.message });
+      }
+    }
+
+    return {
+      content: [{ type: "text", text: `Notes for person ${personId} (${notes.length} found): ${JSON.stringify(notes, null, 2)}` }]
+    };
+  }
+
+  async listTasksForPerson(params) {
+    const { personId, limit = 50 } = params;
+    const filter = encodeURIComponent(`targetPersonId[eq]:${personId}`);
+    const targetsEndpoint = `/rest/taskTargets?filter=${filter}&limit=${limit}`;
+    const targetsResult = await this.makeRequest(targetsEndpoint);
+    const targets = targetsResult?.data?.taskTargets || [];
+
+    if (targets.length === 0) {
+      return { content: [{ type: "text", text: `No tasks found for person ${personId}` }] };
+    }
+
+    const tasks = [];
+    for (const target of targets) {
+      try {
+        const task = await this.makeRequest(`/rest/tasks/${target.taskId}`);
+        tasks.push({ ...task?.data?.getTask || task, taskTargetId: target.id });
+      } catch (e) {
+        tasks.push({ taskId: target.taskId, error: e.message });
+      }
+    }
+
+    return {
+      content: [{ type: "text", text: `Tasks for person ${personId} (${tasks.length} found): ${JSON.stringify(tasks, null, 2)}` }]
+    };
+  }
+
   // Metadata methods
   async getMetadataObjects() {
     const result = await this.makeRequest("/rest/metadata/objects");
@@ -892,7 +1167,26 @@ class TwentyCRMServer {
   }
 
   async getObjectMetadata(objectName) {
-    const result = await this.makeRequest(`/rest/metadata/objects/${objectName}`);
+    // If it looks like a UUID, use it directly; otherwise resolve name → UUID
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectName);
+    let objectId = objectName;
+
+    if (!isUuid) {
+      // Fetch all metadata objects and find by nameSingular or namePlural
+      const allObjects = await this.makeRequest("/rest/metadata/objects");
+      const objects = allObjects?.data?.objects || [];
+      const match = objects.find(
+        (o) => o.nameSingular === objectName || o.namePlural === objectName
+      );
+      if (!match) {
+        return {
+          content: [{ type: "text", text: `No metadata object found with name "${objectName}". Available objects: ${objects.map((o) => o.nameSingular).join(", ")}` }]
+        };
+      }
+      objectId = match.id;
+    }
+
+    const result = await this.makeRequest(`/rest/metadata/objects/${objectId}`);
     return {
       content: [
         {
