@@ -464,9 +464,52 @@ class TwentyCRMServer {
     });
   }
 
+  // Transform flat person fields into Twenty CRM composite format
+  transformPersonData(data) {
+    const transformed = { ...data };
+
+    // Map firstName/lastName → name (FULL_NAME composite)
+    if (transformed.firstName || transformed.lastName) {
+      transformed.name = {
+        firstName: transformed.firstName || "",
+        lastName: transformed.lastName || "",
+      };
+      delete transformed.firstName;
+      delete transformed.lastName;
+    }
+
+    // Map email → emails (EMAILS composite)
+    if (transformed.email) {
+      transformed.emails = {
+        primaryEmail: transformed.email,
+      };
+      delete transformed.email;
+    }
+
+    // Map phone → phones (PHONES composite)
+    if (transformed.phone) {
+      transformed.phones = {
+        primaryPhoneNumber: transformed.phone,
+      };
+      delete transformed.phone;
+    }
+
+    // Map linkedinUrl → links (LINKS composite)
+    if (transformed.linkedinUrl) {
+      transformed.linkedinLink = {
+        url: transformed.linkedinUrl,
+        label: "LinkedIn",
+      };
+      delete transformed.linkedinUrl;
+    }
+
+    return transformed;
+  }
+
   // People methods
   async createPerson(data) {
-    const result = await this.makeRequest("/rest/people", "POST", data);
+    const transformed = this.transformPersonData(data);
+    const result = await this.makeRequest("/rest/people", "POST", transformed);
     return {
       content: [
         {
@@ -491,7 +534,8 @@ class TwentyCRMServer {
 
   async updatePerson(data) {
     const { id, ...updateData } = data;
-    const result = await this.makeRequest(`/rest/people/${id}`, "PUT", updateData);
+    const transformed = this.transformPersonData(updateData);
+    const result = await this.makeRequest(`/rest/people/${id}`, "PUT", transformed);
     return {
       content: [
         {
@@ -605,9 +649,20 @@ class TwentyCRMServer {
     };
   }
 
+  // Transform note/task body field into Twenty CRM bodyV2 format (RICH_TEXT_V2)
+  transformBodyField(data) {
+    const transformed = { ...data };
+    if (transformed.body !== undefined) {
+      transformed.bodyV2 = transformed.body;
+      delete transformed.body;
+    }
+    return transformed;
+  }
+
   // Note methods
   async createNote(data) {
-    const result = await this.makeRequest("/rest/notes", "POST", data);
+    const transformed = this.transformBodyField(data);
+    const result = await this.makeRequest("/rest/notes", "POST", transformed);
     return {
       content: [
         {
@@ -651,7 +706,8 @@ class TwentyCRMServer {
 
   async updateNote(data) {
     const { id, ...updateData } = data;
-    const result = await this.makeRequest(`/rest/notes/${id}`, "PUT", updateData);
+    const transformed = this.transformBodyField(updateData);
+    const result = await this.makeRequest(`/rest/notes/${id}`, "PUT", transformed);
     return {
       content: [
         {
@@ -676,7 +732,8 @@ class TwentyCRMServer {
 
   // Task methods
   async createTask(data) {
-    const result = await this.makeRequest("/rest/tasks", "POST", data);
+    const transformed = this.transformBodyField(data);
+    const result = await this.makeRequest("/rest/tasks", "POST", transformed);
     return {
       content: [
         {
@@ -723,7 +780,8 @@ class TwentyCRMServer {
 
   async updateTask(data) {
     const { id, ...updateData } = data;
-    const result = await this.makeRequest(`/rest/tasks/${id}`, "PUT", updateData);
+    const transformed = this.transformBodyField(updateData);
+    const result = await this.makeRequest(`/rest/tasks/${id}`, "PUT", transformed);
     return {
       content: [
         {
