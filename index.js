@@ -580,9 +580,69 @@ class TwentyCRMServer {
     };
   }
 
+  // Transform flat company fields into Twenty CRM composite format
+  transformCompanyData(data) {
+    const transformed = { ...data };
+
+    // Map domainName string → domainName (LINKS composite)
+    if (typeof transformed.domainName === "string") {
+      const domain = transformed.domainName;
+      transformed.domainName = {
+        primaryLinkLabel: domain,
+        primaryLinkUrl: domain.startsWith("http") ? domain : `https://${domain}`,
+        secondaryLinks: [],
+      };
+    }
+
+    // Map address string → address (ADDRESS composite)
+    if (typeof transformed.address === "string") {
+      transformed.address = {
+        addressStreet1: transformed.address,
+        addressStreet2: "",
+        addressCity: "",
+        addressPostcode: "",
+        addressState: "",
+        addressCountry: "",
+        addressLat: null,
+        addressLng: null,
+      };
+    }
+
+    // Map linkedinUrl → linkedinLink (LINKS composite)
+    if (transformed.linkedinUrl) {
+      transformed.linkedinLink = {
+        primaryLinkLabel: "LinkedIn",
+        primaryLinkUrl: transformed.linkedinUrl,
+        secondaryLinks: [],
+      };
+      delete transformed.linkedinUrl;
+    }
+
+    // Map xUrl → xLink (LINKS composite)
+    if (transformed.xUrl) {
+      transformed.xLink = {
+        primaryLinkLabel: "X",
+        primaryLinkUrl: transformed.xUrl,
+        secondaryLinks: [],
+      };
+      delete transformed.xUrl;
+    }
+
+    // Map annualRecurringRevenue number → annualRecurringRevenue (CURRENCY composite)
+    if (typeof transformed.annualRecurringRevenue === "number") {
+      transformed.annualRecurringRevenue = {
+        amountMicros: transformed.annualRecurringRevenue * 1000000,
+        currencyCode: "EUR",
+      };
+    }
+
+    return transformed;
+  }
+
   // Company methods
   async createCompany(data) {
-    const result = await this.makeRequest("/rest/companies", "POST", data);
+    const transformed = this.transformCompanyData(data);
+    const result = await this.makeRequest("/rest/companies", "POST", transformed);
     return {
       content: [
         {
@@ -607,7 +667,8 @@ class TwentyCRMServer {
 
   async updateCompany(data) {
     const { id, ...updateData } = data;
-    const result = await this.makeRequest(`/rest/companies/${id}`, "PUT", updateData);
+    const transformed = this.transformCompanyData(updateData);
+    const result = await this.makeRequest(`/rest/companies/${id}`, "PUT", transformed);
     return {
       content: [
         {
@@ -650,10 +711,23 @@ class TwentyCRMServer {
   }
 
   // Transform note/task body field into Twenty CRM bodyV2 format (RICH_TEXT_V2)
+  // bodyV2 expects an object with "blocknote" (JSON string) and "markdown" keys
   transformBodyField(data) {
     const transformed = { ...data };
     if (transformed.body !== undefined) {
-      transformed.bodyV2 = transformed.body;
+      const text = transformed.body;
+      // Build a minimal BlockNote document: one paragraph per line
+      const blocks = text.split("\n").map((line, i) => ({
+        id: `block-${Date.now()}-${i}`,
+        type: "paragraph",
+        props: { textColor: "default", backgroundColor: "default", textAlignment: "left" },
+        content: [{ type: "text", text: line, styles: {} }],
+        children: [],
+      }));
+      transformed.bodyV2 = {
+        blocknote: JSON.stringify(blocks),
+        markdown: text,
+      };
       delete transformed.body;
     }
     return transformed;
