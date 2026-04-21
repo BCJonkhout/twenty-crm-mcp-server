@@ -20,11 +20,12 @@ import * as sqlTools from "./src/tools/sql.js";
 import * as graphqlTools from "./src/tools/graphql.js";
 import * as batchTools from "./src/tools/batch.js";
 import * as mergeTools from "./src/tools/merge.js";
+import * as accessTools from "./src/tools/access.js";
 
 const TOOL_MODULES = [
   peopleTools, companyTools, noteTools, taskTools, targetTools,
   queryTools, aggregateTools, sqlTools, graphqlTools,
-  batchTools, mergeTools,
+  batchTools, mergeTools, accessTools,
 ];
 
 async function main() {
