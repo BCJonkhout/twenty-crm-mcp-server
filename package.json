@@ -10,7 +10,8 @@
     "test": "node --test test.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.6.0"
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "pg": "^8.20.0"
   },
   "engines": {
     "node": ">=18"

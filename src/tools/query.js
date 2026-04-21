@@ -127,12 +127,12 @@ export function createHandlers(client) {
         filter: finalFilter,
       });
     },
-    get_metadata_objects: async () => text("Metadata objects:", await client.request("/rest/metadata/objects?limit=500")),
+    get_metadata_objects: async () => text("Metadata objects:", await client.request("/rest/metadata/objects")),
     get_object_metadata: async ({ objectName }) => {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectName);
       let objectId = objectName;
       if (!isUuid) {
-        const allObjects = await client.request("/rest/metadata/objects?limit=500");
+        const allObjects = await client.request("/rest/metadata/objects");
         const objects = allObjects?.data?.objects ?? [];
         const match = objects.find((o) => o.nameSingular === objectName || o.namePlural === objectName);
         if (!match) {
