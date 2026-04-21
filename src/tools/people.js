@@ -49,7 +49,23 @@ Examples:
       filter: createdAt[gte]:"2026-04-01T00:00:00Z"
       order_by: createdAt[DescNullsFirst]
   • Two first-name alternatives via or():
-      filter: or(name.firstName[eq]:"Beau",name.firstName[eq]:"Test")`;
+      filter: or(name.firstName[eq]:"Beau",name.firstName[eq]:"Test")
+
+JSONB field caveat:
+  Twenty's REST filter grammar does NOT support dotted paths into JSONB
+  columns. The architect-register records (prudaiMarketingSourceSystem=
+  "architectenregister") store city under JSONB at
+  prudaiMarketingSourceContext->>'plaats' — NOT on the top-level 'city'
+  column (which is almost always empty). For JSONB-path queries use
+  run_sql_readonly:
+
+    SELECT "nameFirstName", "nameLastName", "jobTitle",
+           "prudaiMarketingSourceContext"->>'plaats' AS plaats
+    FROM person
+    WHERE "prudaiMarketingSourceSystem" = 'architectenregister'
+      AND ("prudaiMarketingSourceContext"->>'plaats') ILIKE '%zwolle%'
+      AND "deletedAt" IS NULL
+    LIMIT 100;`;
 
 export const definitions = [
   {
