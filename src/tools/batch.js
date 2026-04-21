@@ -147,6 +147,14 @@ Example — retag all architects to a new playbook:
 ];
 
 export function createHandlers(client) {
+  // Twenty returns HTTP 400 "A duplicate entry was detected" when a unique
+  // constraint is hit (e.g. primary email on person, domain on company).
+  // With concurrent batch upserts this is a real race: two workers look
+  // up "does this email exist?", both see no → both try POST → one 400s.
+  // Catch that exact error, re-find the existing record, and PATCH it.
+  const isDuplicateError = (err) =>
+    /duplicate entry was detected/i.test(err?.message ?? "");
+
   async function upsertPerson(input) {
     const { firstName, lastName, email, companyId } = input;
     let existing = null;
@@ -157,9 +165,20 @@ export function createHandlers(client) {
       const updated = await client.request(`/rest/people/${existing.id}`, { method: "PATCH", body });
       return { action: "updated", id: existing.id, result: updated };
     }
-    const created = await client.request("/rest/people", { method: "POST", body });
-    const id = created?.data?.createPerson?.id ?? created?.data?.id ?? null;
-    return { action: "created", id, result: created };
+    try {
+      const created = await client.request("/rest/people", { method: "POST", body });
+      const id = created?.data?.createPerson?.id ?? created?.data?.id ?? null;
+      return { action: "created", id, result: created };
+    } catch (err) {
+      if (!isDuplicateError(err)) throw err;
+      // Race with another worker. Re-lookup and patch.
+      let winner = null;
+      if (email) winner = await findPersonByEmail(client, email);
+      if (!winner) winner = await findPersonByNameAndCompany(client, firstName, lastName, companyId);
+      if (!winner) throw err; // nothing to patch onto — surface original error
+      const updated = await client.request(`/rest/people/${winner.id}`, { method: "PATCH", body });
+      return { action: "updated", id: winner.id, result: updated, note: "duplicate-race recovered" };
+    }
   }
 
   async function upsertCompany(input) {
@@ -173,9 +192,19 @@ export function createHandlers(client) {
       const updated = await client.request(`/rest/companies/${existing.id}`, { method: "PATCH", body });
       return { action: "updated", id: existing.id, result: updated };
     }
-    const created = await client.request("/rest/companies", { method: "POST", body });
-    const id = created?.data?.createCompany?.id ?? created?.data?.id ?? null;
-    return { action: "created", id, result: created };
+    try {
+      const created = await client.request("/rest/companies", { method: "POST", body });
+      const id = created?.data?.createCompany?.id ?? created?.data?.id ?? null;
+      return { action: "created", id, result: created };
+    } catch (err) {
+      if (!isDuplicateError(err)) throw err;
+      let winner = null;
+      if (domainName) winner = await findCompanyByDomain(client, domainName);
+      if (!winner && name) winner = await findCompanyByNameCity(client, name, city);
+      if (!winner) throw err;
+      const updated = await client.request(`/rest/companies/${winner.id}`, { method: "PATCH", body });
+      return { action: "updated", id: winner.id, result: updated, note: "duplicate-race recovered" };
+    }
   }
 
   return {
