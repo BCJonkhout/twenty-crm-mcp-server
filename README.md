@@ -138,60 +138,145 @@ Once configured, you can use natural language to interact with your Twenty CRM:
 
 ## 🛠️ API Reference
 
-The server provides the following tools:
+The server registers 43 tools grouped below. Every tool's `description` embeds Examples / filter-grammar hints (few-shot prompts) so the calling model picks the right syntax without extra priming.
+
+### Filter grammar (list_* + query_records + count_records)
+
+Twenty's REST filter dialect, verified against Twenty v1.19:
+
+```
+Operators:    [eq] [neq] [in] [nin] [like] [ilike] [startsWith]
+              [gt] [gte] [lt] [lte] [is]
+⚠ [like] is CASE-SENSITIVE. Use [ilike] for case-insensitive match.
+[nilike] is not supported; compose with or(...)/[neq] instead.
+Composition: and(clauseA,clauseB,...)   |   or(clauseA,clauseB,...)
+Composite fields: dot-notation
+  name.firstName, name.lastName
+  emails.primaryEmail, phones.primaryPhoneNumber
+  address.addressCity, address.addressPostcode, address.addressCountry
+  domainName.primaryLinkUrl, linkedinLink.primaryLinkUrl
+Soft-delete guard: deletedAt[is]:NULL  (auto-added; set include_deleted=true to bypass)
+Pagination:  limit + starting_after=<pageInfo.endCursor>  (cursor, preferred)
+             limit + offset (slower at scale)
+Ordering:    order_by=createdAt[DescNullsFirst]
+Relations:   depth=0|1|2
+```
 
 <details>
-<summary><strong>👥 People Operations</strong></summary>
+<summary><strong>👥 People + 🏢 Companies + 📝 Notes + ✅ Tasks — CRUD + rich list</strong></summary>
 
-- `create_person` - Create a new person
-- `get_person` - Get person details by ID
-- `update_person` - Update person information
-- `list_people` - List people with filtering
-- `delete_person` - Delete a person
+- `create_person` / `get_person` / `update_person` / `delete_person`
+- `list_people` — filter, order_by, cursor pagination, soft-delete toggle, PrudAI custom fields (`prudaiMarketing*`)
+- `create_company` / `get_company` / `update_company` / `delete_company`
+- `list_companies` — same params + `address.addressCity`, `domainName.primaryLinkUrl` filters
+- `create_note` / `get_note` / `update_note` / `delete_note` / `list_notes`
+- `create_task` / `get_task` / `update_task` / `delete_task` / `list_tasks`
+
+Flat convenience inputs (`firstName`, `email`, `domainName` as a string, `body` as plain text) are auto-transformed into Twenty's composite fields (`name`, `emails`, `domainName: { primaryLinkUrl, … }`, `bodyV2`) on send.
 
 </details>
 
 <details>
-<summary><strong>🏢 Company Operations</strong></summary>
+<summary><strong>🔗 Targets — link notes/tasks to people & companies</strong></summary>
 
-- `create_company` - Create a new company
-- `get_company` - Get company details by ID
-- `update_company` - Update company information
-- `list_companies` - List companies with filtering
-- `delete_company` - Delete a company
+- `create_note_target` / `list_note_targets` / `delete_note_target`
+- `create_task_target` / `list_task_targets` / `delete_task_target`
+- `list_notes_for_person` / `list_tasks_for_person` — convenience joins via noteTargets/taskTargets
 
 </details>
 
 <details>
-<summary><strong>✅ Task Operations</strong></summary>
+<summary><strong>🔍 Generic query + metadata + search</strong></summary>
 
-- `create_task` - Create a new task
-- `get_task` - Get task details by ID
-- `update_task` - Update task information
-- `list_tasks` - List tasks with filtering
-- `delete_task` - Delete a task
-
-</details>
-
-<details>
-<summary><strong>📝 Note Operations</strong></summary>
-
-- `create_note` - Create a new note
-- `get_note` - Get note details by ID
-- `update_note` - Update note information
-- `list_notes` - List notes with filtering
-- `delete_note` - Delete a note
+- `query_records` — list ANY Twenty object type (people, companies, notes, tasks, noteTargets, taskTargets, opportunities, messageThreads, messages, custom objects). Same filter grammar as `list_people`.
+- `count_records` — returns `totalCount` for a filter (single cheap request).
+- `get_metadata_objects` / `get_object_metadata` — schema introspection.
+- `search_records` — full-text across object types.
 
 </details>
 
 <details>
-<summary><strong>🔍 Metadata & Search</strong></summary>
+<summary><strong>📊 Aggregates + distinct (psql-backed)</strong></summary>
 
-- `get_metadata_objects` - Get all object types and schemas
-- `get_object_metadata` - Get metadata for specific object
-- `search_records` - Search across multiple object types
+- `aggregate_records` — `GROUP BY` + count/sum/avg/min/max on any object. Friendly composite paths (`address.addressCity`) are translated to the flat Postgres column name (`addressAddressCity`).
+- `distinct_values` — distinct values of a field with counts.
+
+Both execute read-only SQL inside the `twenty-db-1` container.
 
 </details>
+
+<details>
+<summary><strong>🛢 run_sql_readonly — psql escape hatch</strong></summary>
+
+Run arbitrary read-only SQL inside the Twenty Postgres container. Guards:
+- Must start with `SELECT`, `WITH`, `EXPLAIN`, `VALUES`, `TABLE`, or `SHOW`.
+- Forbidden keywords: `insert|update|delete|drop|truncate|alter|create|grant|revoke|copy|call|vacuum|refresh|lock|begin|commit|rollback|prepare|discard|reset|cluster`.
+- Multi-statement SQL is rejected (inner semicolons).
+- Wrapped with `SET default_transaction_read_only = on; SET statement_timeout = '30s'; SET search_path TO "<workspace schema>", public;`.
+- Max 10 000 rows returned.
+
+**Postgres quirk**: unquoted identifiers are folded to lowercase. Always double-quote camelCase columns — `"jobTitle"`, `"addressAddressCity"`, `"nameFirstName"`, `"deletedAt"`, `"prudaiMarketingSourceSystem"`. Lowercase names (`id`, `city`, `name`) don't need quoting.
+
+</details>
+
+<details>
+<summary><strong>🧬 graphql_query — arbitrary GraphQL</strong></summary>
+
+- `graphql_query` — POST against `{baseUrl}/graphql` with `{ query, variables, operationName }`. Use for aggregates, connection-style pagination, and relation selection the REST API can't express cleanly.
+
+</details>
+
+<details>
+<summary><strong>📦 Batch + bulk + merge + link</strong></summary>
+
+- `batch_upsert_people` — parallel upsert; dedup order: `emails.primaryEmail` → `firstName+lastName+companyId`.
+- `batch_upsert_companies` — parallel upsert; dedup order: `domainName` → `name+city` → `name`.
+- `bulk_update_by_filter` — patch every record matching a filter; `dryRun: true` by default.
+- `merge_people` — merge duplicates into a primary: re-points noteTargets/taskTargets, copies null-on-primary fields, soft-deletes duplicates.
+- `link_person_to_company` — shortcut to set `companyId` on a person.
+- `bulk_attach_note` — attach one existing note to many persons/companies in one call.
+
+Concurrency: 8 parallel requests per batch tool.
+
+</details>
+
+### Worked example: "100 architects in Twente"
+
+Twente spans 12 municipalities (Enschede, Hengelo, Almelo, Oldenzaal, Borne, Losser, Haaksbergen, Tubbergen, Dinkelland, Wierden, Hof van Twente, Rijssen-Holten). Most `person.city` values are empty in practice — join via `companyId` instead.
+
+**Watch out for the title-vs-tag mismatch.** `jobTitle[like]:"%architect%"` is case-sensitive and only finds 2,136 rows. `[ilike]` brings it to 10,841. The *authoritative* tag `prudaiMarketingSourceSystem = "architectenregister"` is 13,956 rows — those are the records imported from the Dutch Architectenregister and they are the real answer to "how many architects?"
+
+Ground truth for Twente (verified via psql JOIN):
+- **91 architects** at Twente-based companies (authoritative filter + `addressAddressCity` IN Twente cities).
+
+#### Path A — two REST calls
+
+1. Get Twente company ids:
+   ```
+   list_companies
+     filter: address.addressCity[in]:["Enschede","Hengelo","Almelo","Oldenzaal","Borne","Losser","Haaksbergen","Tubbergen","Dinkelland","Wierden","Hof van Twente","Rijssen-Holten"]
+     limit: 200
+   ```
+2. Filter architects by those companyIds:
+   ```
+   list_people
+     filter: and(prudaiMarketingSourceSystem[eq]:"architectenregister",companyId[in]:[<id1>,<id2>,...])
+     limit: 100
+   ```
+
+#### Path B — single SQL JOIN (fastest)
+
+```
+run_sql_readonly
+  sql: SELECT p.id, p."nameFirstName", p."nameLastName", p."jobTitle",
+              c.name AS company, c."addressAddressCity" AS city
+       FROM person p JOIN company c ON p."companyId" = c.id
+       WHERE p."prudaiMarketingSourceSystem" = 'architectenregister'
+         AND c."addressAddressCity" IN ('Enschede','Hengelo','Almelo','Oldenzaal','Borne','Losser','Haaksbergen','Tubbergen','Dinkelland','Wierden','Hof van Twente','Rijssen-Holten')
+         AND p."deletedAt" IS NULL AND c."deletedAt" IS NULL
+       ORDER BY c."addressAddressCity", p."nameLastName"
+       LIMIT 100
+```
 
 ---
 

@@ -439,3 +439,112 @@ describe("Search", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Unit tests for the new helper modules
+// ---------------------------------------------------------------------------
+
+import { buildListQuery } from "./src/rest.js";
+import { escapeFilterValue, andExpr, orExpr, combineWithSoftDelete, clause } from "./src/filter.js";
+import { buildWrappedSql } from "./src/psql.js";
+import { transformPersonData, transformCompanyData, transformBodyField } from "./src/transforms.js";
+
+describe("filter.js", () => {
+  it("escapeFilterValue handles strings, numbers, arrays, null", () => {
+    assert.equal(escapeFilterValue("Enschede"), '"Enschede"');
+    assert.equal(escapeFilterValue(42), "42");
+    assert.equal(escapeFilterValue(true), "true");
+    assert.equal(escapeFilterValue(null), "NULL");
+    assert.equal(escapeFilterValue(["a", "b"]), '["a","b"]');
+    assert.equal(escapeFilterValue('with "quote"'), '"with \\"quote\\""');
+  });
+
+  it("clause builds field[op]:value", () => {
+    assert.equal(clause("jobTitle", "like", "%architect%"), 'jobTitle[like]:"%architect%"');
+    assert.equal(clause("address.addressCity", "in", ["Enschede", "Hengelo"]), 'address.addressCity[in]:["Enschede","Hengelo"]');
+  });
+
+  it("andExpr / orExpr compose", () => {
+    assert.equal(andExpr("a[eq]:1"), "a[eq]:1");
+    assert.equal(andExpr("a[eq]:1", "b[eq]:2"), "and(a[eq]:1,b[eq]:2)");
+    assert.equal(orExpr("a[eq]:1", "b[eq]:2", "c[eq]:3"), "or(a[eq]:1,b[eq]:2,c[eq]:3)");
+    assert.equal(andExpr(), null);
+  });
+
+  it("combineWithSoftDelete appends deletedAt guard", () => {
+    assert.equal(combineWithSoftDelete(null, false), "deletedAt[is]:NULL");
+    assert.equal(combineWithSoftDelete("a[eq]:1", false), "and(a[eq]:1,deletedAt[is]:NULL)");
+    assert.equal(combineWithSoftDelete("a[eq]:1", true), "a[eq]:1");
+  });
+});
+
+describe("rest.js buildListQuery", () => {
+  it("omits unset params", () => {
+    assert.equal(buildListQuery({}), "");
+  });
+  it("encodes filter, limit, cursor, order_by (brackets encoded, parens kept)", () => {
+    const qs = buildListQuery({
+      filter: 'and(a[eq]:"x",b[in]:[1,2])',
+      limit: 50,
+      after: "CURSOR",
+      order_by: "createdAt[DescNullsFirst]",
+    });
+    assert.match(qs, /^\?/);
+    // encodeURIComponent keeps ( ) ' ! * ~ unescaped but encodes [ ] " , etc.
+    assert.match(qs, /filter=and\(a%5Beq%5D%3A%22x%22%2Cb%5Bin%5D%3A%5B1%2C2%5D\)/);
+    assert.match(qs, /limit=50/);
+    assert.match(qs, /starting_after=CURSOR/);
+    assert.match(qs, /order_by=createdAt%5BDescNullsFirst%5D/);
+  });
+  it("passes soft-delete guard through when provided by caller", () => {
+    const qs = buildListQuery({ filter: "deletedAt[is]:NULL" });
+    assert.match(qs, /deletedAt%5Bis%5D%3ANULL/);
+  });
+});
+
+describe("psql.js safety guard", () => {
+  it("wraps sql with read-only settings", () => {
+    const out = buildWrappedSql("SELECT 1", "ws_x");
+    assert.match(out, /default_transaction_read_only = on/);
+    assert.match(out, /statement_timeout = '30s'/);
+    assert.match(out, /search_path TO "ws_x"/);
+    assert.match(out, /SELECT 1;/);
+  });
+
+  it("assertReadonly rejects writes via runReadonlySql", async () => {
+    const { runReadonlySql } = await import("./src/psql.js");
+    // DELETE/INSERT don't start with SELECT — caught by the opening-keyword check first.
+    await assert.rejects(() => runReadonlySql("DELETE FROM person"), /must start with SELECT/);
+    await assert.rejects(() => runReadonlySql("INSERT INTO person VALUES (1)"), /must start with SELECT/);
+    // Multi-statement with DROP in the second: the FORBIDDEN keyword check fires first.
+    await assert.rejects(() => runReadonlySql("SELECT 1; DROP TABLE x"), /forbidden keyword/);
+    // Two pure SELECTs — caught by the multi-statement guard.
+    await assert.rejects(() => runReadonlySql("SELECT 1; SELECT 2"), /Multiple statements/);
+    await assert.rejects(() => runReadonlySql(""), /SQL is empty/);
+  });
+});
+
+describe("transforms.js", () => {
+  it("transformPersonData maps flat → composite", () => {
+    const t = transformPersonData({ firstName: "A", lastName: "B", email: "a@b.c", phone: "0612345678", linkedinUrl: "https://li.example" });
+    assert.deepEqual(t.name, { firstName: "A", lastName: "B" });
+    assert.deepEqual(t.emails, { primaryEmail: "a@b.c" });
+    assert.deepEqual(t.phones, { primaryPhoneNumber: "0612345678" });
+    assert.equal(t.firstName, undefined);
+    assert.equal(t.email, undefined);
+  });
+
+  it("transformCompanyData wraps domainName string", () => {
+    const t = transformCompanyData({ name: "X", domainName: "example.nl" });
+    assert.equal(t.domainName.primaryLinkUrl, "https://example.nl");
+  });
+
+  it("transformBodyField builds bodyV2 with blocknote + markdown", () => {
+    const t = transformBodyField({ body: "Line 1\nLine 2" });
+    assert.ok(t.bodyV2.blocknote);
+    const blocks = JSON.parse(t.bodyV2.blocknote);
+    assert.equal(blocks.length, 2);
+    assert.equal(blocks[0].content[0].text, "Line 1");
+    assert.equal(t.bodyV2.markdown, "Line 1\nLine 2");
+  });
+});
