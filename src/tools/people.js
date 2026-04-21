@@ -51,21 +51,40 @@ Examples:
   • Two first-name alternatives via or():
       filter: or(name.firstName[eq]:"Beau",name.firstName[eq]:"Test")
 
-JSONB field caveat:
-  Twenty's REST filter grammar does NOT support dotted paths into JSONB
-  columns. The architect-register records (prudaiMarketingSourceSystem=
-  "architectenregister") store city under JSONB at
-  prudaiMarketingSourceContext->>'plaats' — NOT on the top-level 'city'
-  column (which is almost always empty). For JSONB-path queries use
-  run_sql_readonly:
+When a filter returns 0 results — investigate before retrying with
+variations. Common root causes, in order of likelihood:
 
-    SELECT "nameFirstName", "nameLastName", "jobTitle",
-           "prudaiMarketingSourceContext"->>'plaats' AS plaats
+  1. CASE: [like] is case-sensitive. Try [ilike] for substring match.
+  2. EMPTY COLUMN: the value may live in a JSONB column, not the flat
+     top-level field you filtered on. Twenty's REST filter grammar does
+     NOT support dotted paths into JSONB — switch to run_sql_readonly.
+  3. WRONG OBJECT: the attribute may live on a related object. E.g. a
+     person's workplace city is on the linked company's address, not
+     on person itself.
+
+Discovering where a value actually lives:
+
+  Step 1 — fetch one sample record with get_person / list_people and
+  scan its JSON for any field whose value looks like an object or
+  array. Those are JSONB. Typical PrudAI names: prudaiMarketingSource
+  Context, prudaiMarketingSuppressionFlags, prudaiMarketingPhoneNumbers.
+
+  Step 2 — enumerate the JSONB keys with run_sql_readonly:
+    SELECT DISTINCT jsonb_object_keys("<jsonbColumn>") AS k
+    FROM <table> WHERE "<jsonbColumn>" IS NOT NULL LIMIT 50;
+
+  Step 3 — filter via ->> (text) or -> (object):
+    SELECT id, "nameFirstName", "nameLastName",
+           "<jsonbColumn>"->>'<key>' AS value
     FROM person
-    WHERE "prudaiMarketingSourceSystem" = 'architectenregister'
-      AND ("prudaiMarketingSourceContext"->>'plaats') ILIKE '%zwolle%'
+    WHERE ("<jsonbColumn>"->>'<key>') ILIKE '%searchterm%'
       AND "deletedAt" IS NULL
-    LIMIT 100;`;
+    LIMIT 100;
+
+Skip straight to SQL when:
+  • The field you need is an object/array (JSONB).
+  • The query needs a JOIN (e.g. person + company.address).
+  • You're doing a count/aggregate over thousands of rows.`;
 
 export const definitions = [
   {
