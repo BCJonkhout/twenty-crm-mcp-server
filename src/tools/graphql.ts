@@ -1,5 +1,8 @@
-import { graphqlRequest } from "../graphql.js";
-import { text } from "./_render.js";
+import { graphqlRequest } from "../graphql.ts";
+import type { RestClient } from "../rest.ts";
+import { text } from "./_render.ts";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { ToolHandler } from "../types.ts";
 
 const DESCRIPTION = `Run an arbitrary GraphQL query or mutation against Twenty's /graphql endpoint. Use this for things the REST API cannot express cleanly (connection-style pagination, aggregates, nested relation selection).
 
@@ -12,7 +15,7 @@ Examples:
       query: "mutation($id: UUID!, $data: PersonUpdateInput!) { updatePerson(id: $id, data: $data) { id } }"
       variables: { "id": "<uuid>", "data": { "jobTitle": "Senior Architect" } }`;
 
-export const definitions = [
+export const definitions: Tool[] = [
   {
     name: "graphql_query",
     description: DESCRIPTION,
@@ -28,14 +31,22 @@ export const definitions = [
   },
 ];
 
-export function createHandlers(client) {
+interface GraphQLArgs {
+  query: string;
+  variables?: Record<string, unknown>;
+  operationName?: string;
+}
+
+export function createHandlers(client: RestClient): Record<string, ToolHandler> {
   return {
-    graphql_query: async ({ query, variables, operationName }) => {
+    graphql_query: async (args) => {
+      const { query, variables, operationName } = args as unknown as GraphQLArgs;
       try {
         const result = await graphqlRequest(client, { query, variables, operationName });
         return text("GraphQL result:", result);
       } catch (err) {
-        if (/HTTP 404/.test(err.message)) {
+        const e = err as Error;
+        if (/HTTP 404/.test(e.message)) {
           throw new Error("GraphQL endpoint is not enabled on this Twenty instance (/graphql → 404).");
         }
         throw err;

@@ -1,7 +1,9 @@
-import { buildListQuery } from "../rest.js";
-import { transformCompanyData } from "../transforms.js";
-import { combineWithSoftDelete } from "../filter.js";
-import { text, ok } from "./_render.js";
+import { buildListQuery, type RestClient } from "../rest.ts";
+import { transformCompanyData, type CompanyInput } from "../transforms.ts";
+import { combineWithSoftDelete } from "../filter.ts";
+import { text, ok } from "./_render.ts";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { ToolHandler } from "../types.ts";
 
 const LIST_DESCRIPTION = `List companies with rich filtering, ordering, and cursor pagination.
 
@@ -35,7 +37,7 @@ Examples:
       filter: and(idealCustomerProfile[eq]:true,updatedAt[gte]:"2026-04-01")
       order_by: updatedAt[DescNullsFirst]`;
 
-export const definitions = [
+export const definitions: Tool[] = [
   {
     name: "create_company",
     description: `Create a company. domainName/address/linkedinUrl/xUrl/annualRecurringRevenue are flat-input wrappers transformed to composites.
@@ -55,7 +57,7 @@ OWNERSHIP:
         idealCustomerProfile: { type: "boolean" },
         accountOwnerId: {
           type: "string",
-          description: "workspaceMember UUID of the rep who owns this company. Row-level permissions key off this field."
+          description: "workspaceMember UUID of the rep who owns this company. Row-level permissions key off this field.",
         },
       },
       required: ["name"],
@@ -84,7 +86,7 @@ OWNERSHIP:
         annualRecurringRevenue: { type: "number" },
         accountOwnerId: {
           type: "string",
-          description: "workspaceMember UUID of the rep. Changing this does not cascade to linked People — use bulk_update_by_filter to propagate."
+          description: "workspaceMember UUID of the rep. Changing this does not cascade to linked People — use bulk_update_by_filter to propagate.",
         },
       },
       required: ["id"],
@@ -115,24 +117,40 @@ OWNERSHIP:
   },
 ];
 
-export function createHandlers(client) {
+interface ListCompaniesArgs {
+  filter?: string;
+  order_by?: string;
+  depth?: number;
+  limit?: number;
+  offset?: number;
+  starting_after?: string;
+  ending_before?: string;
+  search?: string;
+  include_deleted?: boolean;
+}
+
+export function createHandlers(client: RestClient): Record<string, ToolHandler> {
   return {
     create_company: async (args) => {
-      const body = transformCompanyData(args);
+      const body = transformCompanyData(args as CompanyInput);
       const result = await client.request("/rest/companies", { method: "POST", body });
       return text("Created company:", result);
     },
-    get_company: async ({ id }) => {
+    get_company: async (args) => {
+      const { id } = args as { id: string };
       const result = await client.request(`/rest/companies/${id}`);
       return text("Company:", result);
     },
-    update_company: async ({ id, ...rest }) => {
+    update_company: async (args) => {
+      const { id, ...rest } = args as { id: string } & CompanyInput;
       const body = transformCompanyData(rest);
       const result = await client.request(`/rest/companies/${id}`, { method: "PATCH", body });
       return text("Updated company:", result);
     },
-    list_companies: async (args = {}) => {
-      const { filter, order_by, depth, limit = 20, offset, starting_after, ending_before, search, include_deleted = false } = args;
+    list_companies: async (args) => {
+      const {
+        filter, order_by, depth, limit = 20, offset, starting_after, ending_before, search, include_deleted = false,
+      } = (args ?? {}) as ListCompaniesArgs;
       const finalFilter = combineWithSoftDelete(filter ?? null, include_deleted);
       const qs = buildListQuery({
         filter: finalFilter, order_by, depth, limit, offset,
@@ -142,7 +160,8 @@ export function createHandlers(client) {
       const result = await client.request(`/rest/companies${qs}`);
       return text("Companies:", result);
     },
-    delete_company: async ({ id }) => {
+    delete_company: async (args) => {
+      const { id } = args as { id: string };
       await client.request(`/rest/companies/${id}`, { method: "DELETE" });
       return ok(`Deleted company ${id}`);
     },

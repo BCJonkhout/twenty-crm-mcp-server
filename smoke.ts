@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // End-to-end smoke test: spawn the MCP server over stdio, run ListTools, then
 // exercise list_people, count_records, aggregate_records, run_sql_readonly,
 // graphql_query, and a batch_upsert cycle.
@@ -6,64 +6,79 @@
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const settings = JSON.parse(readFileSync("/root/.claude/settings.json", "utf8"));
-const env = {
-  ...process.env,
-  TWENTY_API_KEY: settings.mcpServers["twenty-crm"].env.TWENTY_API_KEY,
-  TWENTY_BASE_URL: settings.mcpServers["twenty-crm"].env.TWENTY_BASE_URL,
+interface ClaudeSettings {
+  mcpServers: Record<string, { env: Record<string, string> }>;
+}
+
+const settings = JSON.parse(readFileSync("/root/.claude/settings.json", "utf8")) as ClaudeSettings;
+const env: Record<string, string> = {
+  ...(process.env as Record<string, string>),
+  TWENTY_API_KEY: settings.mcpServers["twenty-crm"]!.env.TWENTY_API_KEY!,
+  TWENTY_BASE_URL: settings.mcpServers["twenty-crm"]!.env.TWENTY_BASE_URL!,
 };
 
-const proc = spawn("node", ["index.js"], { cwd: import.meta.dirname, env, stdio: ["pipe", "pipe", "pipe"] });
-proc.stderr.on("data", (d) => process.stderr.write("[srv] " + d));
+const proc = spawn("bun", ["run", "src/index.ts"], { cwd: import.meta.dirname, env, stdio: ["pipe", "pipe", "pipe"] });
+proc.stderr!.on("data", (d: Buffer) => process.stderr.write("[srv] " + d.toString()));
+
+interface RpcMessage {
+  jsonrpc: "2.0";
+  id?: number;
+  method?: string;
+  params?: unknown;
+  result?: any;
+  error?: unknown;
+}
 
 let buf = "";
-const pending = new Map();
+const pending = new Map<number, (msg: RpcMessage) => void>();
 let nextId = 1;
 
-proc.stdout.on("data", (d) => {
+proc.stdout!.on("data", (d: Buffer) => {
   buf += d.toString();
-  let idx;
+  let idx: number;
   while ((idx = buf.indexOf("\n")) !== -1) {
     const line = buf.slice(0, idx);
     buf = buf.slice(idx + 1);
     if (!line.trim()) continue;
     try {
-      const msg = JSON.parse(line);
-      const resolver = pending.get(msg.id);
-      if (resolver) {
-        pending.delete(msg.id);
-        resolver(msg);
+      const msg = JSON.parse(line) as RpcMessage;
+      if (msg.id !== undefined) {
+        const resolver = pending.get(msg.id);
+        if (resolver) {
+          pending.delete(msg.id);
+          resolver(msg);
+        }
       }
-    } catch (err) {
+    } catch {
       console.error("[parse-err]", line);
     }
   }
 });
 
-function send(method, params) {
+function send(method: string, params: unknown): Promise<RpcMessage> {
   const id = nextId++;
   const req = { jsonrpc: "2.0", id, method, params };
-  proc.stdin.write(JSON.stringify(req) + "\n");
+  proc.stdin!.write(JSON.stringify(req) + "\n");
   return new Promise((resolve) => pending.set(id, resolve));
 }
 
-function preview(obj, max = 400) {
+function preview(obj: unknown, max = 400): string {
   const s = JSON.stringify(obj);
   return s.length > max ? s.slice(0, max) + `…(${s.length}b)` : s;
 }
 
-async function main() {
+async function main(): Promise<void> {
   // Spec-compliant MCP handshake.
   await send("initialize", {
     protocolVersion: "2024-11-05",
     clientInfo: { name: "smoke", version: "0" },
     capabilities: {},
   });
-  proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
+  proc.stdin!.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
 
   const tools = await send("tools/list", {});
   console.log(`✓ tools/list — ${tools.result.tools.length} tools`);
-  const names = tools.result.tools.map((t) => t.name).sort();
+  const names = tools.result.tools.map((t: { name: string }) => t.name).sort();
   console.log("  names:", names.join(", "));
 
   // 1. count architects (three ways — show the gap between them)
@@ -71,9 +86,9 @@ async function main() {
     ["[like]   jobTitle lowercase (case-sensitive)", 'jobTitle[like]:"%architect%"'],
     ["[ilike]  jobTitle any case",                   'jobTitle[ilike]:"%architect%"'],
     ["[eq]     prudaiMarketingSourceSystem (authoritative)", 'prudaiMarketingSourceSystem[eq]:"architectenregister"'],
-  ]) {
+  ] as const) {
     const r = await send("tools/call", { name: "count_records", arguments: { objectType: "people", filter } });
-    const txt = r.result.content[0].text;
+    const txt = r.result.content[0].text as string;
     const tc = txt.match(/"totalCount":\s*(\d+)/)?.[1];
     console.log(`✓ count_records  ${label}:  totalCount=${tc}`);
   }
@@ -134,14 +149,14 @@ async function main() {
     },
   });
   const companiesPayload = JSON.parse(companiesRes.result.content[0].text.replace(/^[^{]*/, ""));
-  const companyIds = (companiesPayload?.data?.companies ?? []).map((c) => c.id);
+  const companyIds = (companiesPayload?.data?.companies ?? []).map((c: { id: string }) => c.id);
   console.log(`✓ Twente companies found: ${companyIds.length}`);
 
   if (companyIds.length) {
     const archRes = await send("tools/call", {
       name: "list_people",
       arguments: {
-        filter: `and(prudaiMarketingSourceSystem[eq]:"architectenregister",companyId[in]:[${companyIds.map((i) => `"${i}"`).join(",")}])`,
+        filter: `and(prudaiMarketingSourceSystem[eq]:"architectenregister",companyId[in]:[${companyIds.map((i: string) => `"${i}"`).join(",")}])`,
         limit: 100,
       },
     });
@@ -149,7 +164,7 @@ async function main() {
     const archPeople = archPayload?.data?.people ?? [];
     const totalCount = archPayload?.totalCount;
     console.log(`✓ Twente architects — totalCount=${totalCount}, returned=${archPeople.length}`);
-    console.log("  first 3:", archPeople.slice(0, 3).map((p) => ({
+    console.log("  first 3:", archPeople.slice(0, 3).map((p: { id: string; name: unknown; jobTitle: unknown; companyId: unknown }) => ({
       id: p.id,
       name: p.name,
       jobTitle: p.jobTitle,

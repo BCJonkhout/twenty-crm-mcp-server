@@ -1,6 +1,8 @@
-import { buildListQuery } from "../rest.js";
-import { combineWithSoftDelete } from "../filter.js";
-import { text } from "./_render.js";
+import { buildListQuery, type RestClient } from "../rest.ts";
+import { combineWithSoftDelete } from "../filter.ts";
+import { text } from "./_render.ts";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { ToolHandler } from "../types.ts";
 
 const QUERY_DESCRIPTION = `Generic list for ANY Twenty object type — standard (people, companies, notes, tasks, noteTargets, taskTargets, opportunities, messageThreads, messages) and custom (e.g. at PrudAI the person/company records carry prudaiMarketing* fields). Use this when there is no dedicated list_* tool for the object type you need.
 
@@ -40,7 +42,7 @@ Examples:
       objectType: "companies"
       filter: address.addressCity[in]:["Enschede","Hengelo","Almelo","Oldenzaal","Borne","Losser","Haaksbergen","Tubbergen","Dinkelland","Wierden","Hof van Twente","Rijssen-Holten"]`;
 
-export const definitions = [
+export const definitions: Tool[] = [
   {
     name: "query_records",
     description: QUERY_DESCRIPTION,
@@ -103,10 +105,35 @@ export const definitions = [
   },
 ];
 
-export function createHandlers(client) {
+interface QueryRecordsArgs {
+  objectType?: string;
+  filter?: string;
+  order_by?: string;
+  depth?: number;
+  limit?: number;
+  offset?: number;
+  starting_after?: string;
+  ending_before?: string;
+  search?: string;
+  include_deleted?: boolean;
+}
+
+interface CountRecordsArgs {
+  objectType?: string;
+  filter?: string;
+  include_deleted?: boolean;
+}
+
+interface MetadataObjectsResponse {
+  data?: { objects?: Array<{ id: string; nameSingular: string; namePlural?: string }> };
+}
+
+export function createHandlers(client: RestClient): Record<string, ToolHandler> {
   return {
-    query_records: async (args = {}) => {
-      const { objectType, filter, order_by, depth, limit = 20, offset, starting_after, ending_before, search, include_deleted = false } = args;
+    query_records: async (args) => {
+      const {
+        objectType, filter, order_by, depth, limit = 20, offset, starting_after, ending_before, search, include_deleted = false,
+      } = (args ?? {}) as QueryRecordsArgs;
       if (!objectType) throw new Error("objectType is required");
       const finalFilter = combineWithSoftDelete(filter ?? null, include_deleted);
       const qs = buildListQuery({
@@ -117,22 +144,24 @@ export function createHandlers(client) {
       const result = await client.request(`/rest/${objectType}${qs}`);
       return text(`${objectType}:`, result);
     },
-    count_records: async ({ objectType, filter, include_deleted = false } = {}) => {
+    count_records: async (args) => {
+      const { objectType, filter, include_deleted = false } = (args ?? {}) as CountRecordsArgs;
       if (!objectType) throw new Error("objectType is required");
       const finalFilter = combineWithSoftDelete(filter ?? null, include_deleted);
       const qs = buildListQuery({ filter: finalFilter, limit: 1, include_deleted: true });
-      const result = await client.request(`/rest/${objectType}${qs}`);
+      const result = await client.request<{ totalCount?: number }>(`/rest/${objectType}${qs}`);
       return text(`count(${objectType}):`, {
         totalCount: result?.totalCount ?? null,
         filter: finalFilter,
       });
     },
     get_metadata_objects: async () => text("Metadata objects:", await client.request("/rest/metadata/objects")),
-    get_object_metadata: async ({ objectName }) => {
+    get_object_metadata: async (args) => {
+      const { objectName } = args as { objectName: string };
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(objectName);
-      let objectId = objectName;
+      let objectId: string = objectName;
       if (!isUuid) {
-        const allObjects = await client.request("/rest/metadata/objects");
+        const allObjects = await client.request<MetadataObjectsResponse>("/rest/metadata/objects");
         const objects = allObjects?.data?.objects ?? [];
         const match = objects.find((o) => o.nameSingular === objectName || o.namePlural === objectName);
         if (!match) {
@@ -142,13 +171,16 @@ export function createHandlers(client) {
       }
       return text(`Metadata for ${objectName}:`, await client.request(`/rest/metadata/objects/${objectId}`));
     },
-    search_records: async ({ query, objectTypes = ["people", "companies"], limit = 10 }) => {
-      const results = {};
+    search_records: async (args) => {
+      const { query, objectTypes = ["people", "companies"], limit = 10 } = args as {
+        query: string; objectTypes?: string[]; limit?: number;
+      };
+      const results: Record<string, unknown> = {};
       for (const objectType of objectTypes) {
         try {
           results[objectType] = await client.request(`/rest/${objectType}?search=${encodeURIComponent(query)}&limit=${limit}`);
         } catch (err) {
-          results[objectType] = { error: err.message };
+          results[objectType] = { error: (err as Error).message };
         }
       }
       return text(`Search "${query}":`, results);

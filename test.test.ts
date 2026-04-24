@@ -1,16 +1,13 @@
-#!/usr/bin/env node
-
 /**
  * E2E integration tests for Twenty CRM MCP server.
  *
  * Requires TWENTY_API_KEY and TWENTY_BASE_URL env vars.
- * Uses Node built-in test runner (node --test).
+ * Runs via `bun test`.
  *
  * All test data is created and cleaned up within each test.
  */
 
-import { describe, it, before, after } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, beforeAll, afterAll, expect } from "bun:test";
 
 const API_KEY = process.env.TWENTY_API_KEY;
 const BASE_URL = process.env.TWENTY_BASE_URL || "https://crm.prudai.com";
@@ -24,9 +21,9 @@ if (!API_KEY) {
 // HTTP helper
 // ---------------------------------------------------------------------------
 
-async function api(endpoint, method = "GET", data = null) {
+async function api<T = any>(endpoint: string, method: string = "GET", data: unknown = null): Promise<T> {
   const url = `${BASE_URL}${endpoint}`;
-  const opts = {
+  const opts: RequestInit = {
     method,
     headers: {
       Authorization: `Bearer ${API_KEY}`,
@@ -41,10 +38,10 @@ async function api(endpoint, method = "GET", data = null) {
     const text = await res.text();
     throw new Error(`HTTP ${res.status}: ${text}`);
   }
-  return res.json();
+  return res.json() as Promise<T>;
 }
 
-function encFilter(expr) {
+function encFilter(expr: string): string {
   return encodeURIComponent(expr);
 }
 
@@ -52,18 +49,18 @@ function encFilter(expr) {
 // Fixtures — shared person + company created once, cleaned up at the end
 // ---------------------------------------------------------------------------
 
-let testPersonId;
-let testCompanyId;
+let testPersonId: string;
+let testCompanyId: string;
 
-before(async () => {
-  const person = await api("/rest/people", "POST", {
+beforeAll(async () => {
+  const person = await api<{ data: { createPerson: { id: string } } }>("/rest/people", "POST", {
     name: { firstName: "MCPTest", lastName: "Suite" },
     emails: { primaryEmail: "mcp-test-suite@test.local" },
     city: "Enschede",
   });
   testPersonId = person.data.createPerson.id;
 
-  const company = await api("/rest/companies", "POST", {
+  const company = await api<{ data: { createCompany: { id: string } } }>("/rest/companies", "POST", {
     name: "MCP Test Suite Corp",
     domainName: {
       primaryLinkLabel: "mcp-test-suite.local",
@@ -74,7 +71,7 @@ before(async () => {
   testCompanyId = company.data.createCompany.id;
 });
 
-after(async () => {
+afterAll(async () => {
   await api(`/rest/people/${testPersonId}`, "DELETE").catch(() => {});
   await api(`/rest/companies/${testCompanyId}`, "DELETE").catch(() => {});
 });
@@ -84,10 +81,10 @@ after(async () => {
 // ---------------------------------------------------------------------------
 
 describe("Person CRUD", () => {
-  let personId;
+  let personId: string;
 
   it("create_person with composite fields", async () => {
-    const res = await api("/rest/people", "POST", {
+    const res = await api<any>("/rest/people", "POST", {
       name: { firstName: "Test", lastName: "PersonCRUD" },
       emails: { primaryEmail: "crud@test.local" },
       phones: { primaryPhoneNumber: "+31600000001" },
@@ -95,33 +92,33 @@ describe("Person CRUD", () => {
       jobTitle: "Tester",
     });
     personId = res.data.createPerson.id;
-    assert.ok(personId, "Person ID should be returned");
-    assert.deepStrictEqual(res.data.createPerson.name, {
+    expect(personId).toBeTruthy();
+    expect(res.data.createPerson.name).toEqual({
       firstName: "Test",
       lastName: "PersonCRUD",
     });
   });
 
   it("get_person", async () => {
-    const res = await api(`/rest/people/${personId}`);
-    assert.ok(res.data, "Should return person data");
+    const res = await api<any>(`/rest/people/${personId}`);
+    expect(res.data).toBeTruthy();
   });
 
   it("update_person with composite name", async () => {
-    const res = await api(`/rest/people/${personId}`, "PUT", {
+    const res = await api<any>(`/rest/people/${personId}`, "PUT", {
       name: { firstName: "Updated", lastName: "PersonCRUD" },
     });
-    assert.equal(res.data.updatePerson.name.firstName, "Updated");
+    expect(res.data.updatePerson.name.firstName).toBe("Updated");
   });
 
   it("list_people", async () => {
-    const res = await api("/rest/people?limit=2");
-    assert.ok(Array.isArray(res.data.people), "Should return array");
+    const res = await api<any>("/rest/people?limit=2");
+    expect(Array.isArray(res.data.people)).toBe(true);
   });
 
   it("delete_person", async () => {
-    const res = await api(`/rest/people/${personId}`, "DELETE");
-    assert.ok(res.data, "Should confirm deletion");
+    const res = await api<any>(`/rest/people/${personId}`, "DELETE");
+    expect(res.data).toBeTruthy();
   });
 });
 
@@ -130,10 +127,10 @@ describe("Person CRUD", () => {
 // ---------------------------------------------------------------------------
 
 describe("Company CRUD", () => {
-  let companyId;
+  let companyId: string;
 
   it("create_company with composite fields", async () => {
-    const res = await api("/rest/companies", "POST", {
+    const res = await api<any>("/rest/companies", "POST", {
       name: "TestCorp CRUD",
       domainName: {
         primaryLinkLabel: "testcorp-crud.local",
@@ -152,25 +149,25 @@ describe("Company CRUD", () => {
       },
     });
     companyId = res.data.createCompany.id;
-    assert.ok(companyId);
-    assert.equal(res.data.createCompany.name, "TestCorp CRUD");
+    expect(companyId).toBeTruthy();
+    expect(res.data.createCompany.name).toBe("TestCorp CRUD");
   });
 
   it("update_company", async () => {
-    const res = await api(`/rest/companies/${companyId}`, "PUT", {
+    const res = await api<any>(`/rest/companies/${companyId}`, "PUT", {
       name: "TestCorp CRUD Updated",
     });
-    assert.equal(res.data.updateCompany.name, "TestCorp CRUD Updated");
+    expect(res.data.updateCompany.name).toBe("TestCorp CRUD Updated");
   });
 
   it("list_companies", async () => {
-    const res = await api("/rest/companies?limit=2");
-    assert.ok(Array.isArray(res.data.companies));
+    const res = await api<any>("/rest/companies?limit=2");
+    expect(Array.isArray(res.data.companies)).toBe(true);
   });
 
   it("delete_company", async () => {
-    const res = await api(`/rest/companies/${companyId}`, "DELETE");
-    assert.ok(res.data);
+    const res = await api<any>(`/rest/companies/${companyId}`, "DELETE");
+    expect(res.data).toBeTruthy();
   });
 });
 
@@ -179,10 +176,10 @@ describe("Company CRUD", () => {
 // ---------------------------------------------------------------------------
 
 describe("Note CRUD with bodyV2", () => {
-  let noteId;
+  let noteId: string;
 
   it("create_note with RICH_TEXT_V2 bodyV2", async () => {
-    const res = await api("/rest/notes", "POST", {
+    const res = await api<any>("/rest/notes", "POST", {
       title: "Test Note CRUD",
       bodyV2: {
         blocknote:
@@ -191,12 +188,12 @@ describe("Note CRUD with bodyV2", () => {
       },
     });
     noteId = res.data.createNote.id;
-    assert.ok(noteId);
-    assert.equal(res.data.createNote.title, "Test Note CRUD");
+    expect(noteId).toBeTruthy();
+    expect(res.data.createNote.title).toBe("Test Note CRUD");
   });
 
   it("update_note bodyV2", async () => {
-    const res = await api(`/rest/notes/${noteId}`, "PUT", {
+    const res = await api<any>(`/rest/notes/${noteId}`, "PUT", {
       title: "Test Note CRUD Updated",
       bodyV2: {
         blocknote:
@@ -204,17 +201,17 @@ describe("Note CRUD with bodyV2", () => {
         markdown: "Updated.",
       },
     });
-    assert.equal(res.data.updateNote.title, "Test Note CRUD Updated");
+    expect(res.data.updateNote.title).toBe("Test Note CRUD Updated");
   });
 
   it("list_notes", async () => {
-    const res = await api("/rest/notes?limit=2");
-    assert.ok(Array.isArray(res.data.notes));
+    const res = await api<any>("/rest/notes?limit=2");
+    expect(Array.isArray(res.data.notes)).toBe(true);
   });
 
   it("delete_note", async () => {
-    const res = await api(`/rest/notes/${noteId}`, "DELETE");
-    assert.ok(res.data);
+    const res = await api<any>(`/rest/notes/${noteId}`, "DELETE");
+    expect(res.data).toBeTruthy();
   });
 });
 
@@ -223,10 +220,10 @@ describe("Note CRUD with bodyV2", () => {
 // ---------------------------------------------------------------------------
 
 describe("Task CRUD with bodyV2 and status", () => {
-  let taskId;
+  let taskId: string;
 
   it("create_task", async () => {
-    const res = await api("/rest/tasks", "POST", {
+    const res = await api<any>("/rest/tasks", "POST", {
       title: "Test Task CRUD",
       status: "TODO",
       bodyV2: {
@@ -235,32 +232,32 @@ describe("Task CRUD with bodyV2 and status", () => {
       },
     });
     taskId = res.data.createTask.id;
-    assert.ok(taskId);
-    assert.equal(res.data.createTask.status, "TODO");
+    expect(taskId).toBeTruthy();
+    expect(res.data.createTask.status).toBe("TODO");
   });
 
   it("update_task status TODO → IN_PROGRESS", async () => {
-    const res = await api(`/rest/tasks/${taskId}`, "PUT", {
+    const res = await api<any>(`/rest/tasks/${taskId}`, "PUT", {
       status: "IN_PROGRESS",
     });
-    assert.equal(res.data.updateTask.status, "IN_PROGRESS");
+    expect(res.data.updateTask.status).toBe("IN_PROGRESS");
   });
 
   it("update_task status IN_PROGRESS → DONE", async () => {
-    const res = await api(`/rest/tasks/${taskId}`, "PUT", {
+    const res = await api<any>(`/rest/tasks/${taskId}`, "PUT", {
       status: "DONE",
     });
-    assert.equal(res.data.updateTask.status, "DONE");
+    expect(res.data.updateTask.status).toBe("DONE");
   });
 
   it("list_tasks", async () => {
-    const res = await api("/rest/tasks?limit=2");
-    assert.ok(Array.isArray(res.data.tasks));
+    const res = await api<any>("/rest/tasks?limit=2");
+    expect(Array.isArray(res.data.tasks)).toBe(true);
   });
 
   it("delete_task", async () => {
-    const res = await api(`/rest/tasks/${taskId}`, "DELETE");
-    assert.ok(res.data);
+    const res = await api<any>(`/rest/tasks/${taskId}`, "DELETE");
+    expect(res.data).toBeTruthy();
   });
 });
 
@@ -269,70 +266,68 @@ describe("Task CRUD with bodyV2 and status", () => {
 // ---------------------------------------------------------------------------
 
 describe("NoteTarget lifecycle", () => {
-  let noteId;
-  let ntPersonId;
-  let ntCompanyId;
+  let noteId: string;
+  let ntPersonId: string;
+  let ntCompanyId: string;
 
   it("create_note for target tests", async () => {
-    const res = await api("/rest/notes", "POST", {
+    const res = await api<any>("/rest/notes", "POST", {
       title: "Note for targeting",
       bodyV2: { blocknote: "[]", markdown: "target test" },
     });
     noteId = res.data.createNote.id;
-    assert.ok(noteId);
+    expect(noteId).toBeTruthy();
   });
 
   it("create_note_target for person", async () => {
-    const res = await api("/rest/noteTargets", "POST", {
+    const res = await api<any>("/rest/noteTargets", "POST", {
       noteId,
       targetPersonId: testPersonId,
     });
     ntPersonId = res.data.createNoteTarget.id;
-    assert.ok(ntPersonId);
-    assert.equal(res.data.createNoteTarget.noteId, noteId);
-    assert.equal(res.data.createNoteTarget.targetPersonId, testPersonId);
+    expect(ntPersonId).toBeTruthy();
+    expect(res.data.createNoteTarget.noteId).toBe(noteId);
+    expect(res.data.createNoteTarget.targetPersonId).toBe(testPersonId);
   });
 
   it("create_note_target for company", async () => {
-    const res = await api("/rest/noteTargets", "POST", {
+    const res = await api<any>("/rest/noteTargets", "POST", {
       noteId,
       targetCompanyId: testCompanyId,
     });
     ntCompanyId = res.data.createNoteTarget.id;
-    assert.ok(ntCompanyId);
-    assert.equal(res.data.createNoteTarget.targetCompanyId, testCompanyId);
+    expect(ntCompanyId).toBeTruthy();
+    expect(res.data.createNoteTarget.targetCompanyId).toBe(testCompanyId);
   });
 
   it("list_note_targets by noteId", async () => {
     const filter = encFilter(`noteId[eq]:${noteId}`);
-    const res = await api(`/rest/noteTargets?filter=${filter}&limit=10`);
-    const targets = res.data.noteTargets;
-    assert.equal(targets.length, 2, "Should have 2 targets (person + company)");
+    const res = await api<any>(`/rest/noteTargets?filter=${filter}&limit=10`);
+    const targets = res.data.noteTargets as Array<any>;
+    expect(targets.length).toBe(2);
     const personTarget = targets.find((t) => t.targetPersonId === testPersonId);
-    const companyTarget = targets.find(
-      (t) => t.targetCompanyId === testCompanyId
-    );
-    assert.ok(personTarget, "Person target should exist");
-    assert.ok(companyTarget, "Company target should exist");
+    const companyTarget = targets.find((t) => t.targetCompanyId === testCompanyId);
+    expect(personTarget).toBeTruthy();
+    expect(companyTarget).toBeTruthy();
   });
 
   it("list_notes_for_person via noteTarget filter", async () => {
     const filter = encFilter(`targetPersonId[eq]:${testPersonId}`);
-    const res = await api(`/rest/noteTargets?filter=${filter}&limit=50`);
-    const targets = res.data.noteTargets;
-    assert.ok(targets.length >= 1, "Should find at least 1 noteTarget");
+    const res = await api<any>(`/rest/noteTargets?filter=${filter}&limit=50`);
+    const targets = res.data.noteTargets as Array<any>;
+    expect(targets.length >= 1).toBe(true);
     const match = targets.find((t) => t.noteId === noteId);
-    assert.ok(match, "Should find our test note in person's noteTargets");
+    expect(match).toBeTruthy();
   });
 
   it("delete_note_target (person)", async () => {
-    const res = await api(`/rest/noteTargets/${ntPersonId}`, "DELETE");
-    assert.ok(res.data);
+    const res = await api<any>(`/rest/noteTargets/${ntPersonId}`, "DELETE");
+    expect(res.data).toBeTruthy();
   });
 
   it("delete_note_target (company)", async () => {
-    const res = await api(`/rest/noteTargets/${ntCompanyId}`, "DELETE");
-    assert.ok(res.data);
+    const res = await api<any>(`/rest/noteTargets/${ntCompanyId}`, "DELETE");
+    expect(res.data).toBeTruthy();
   });
 
   it("cleanup: delete_note", async () => {
@@ -345,46 +340,46 @@ describe("NoteTarget lifecycle", () => {
 // ---------------------------------------------------------------------------
 
 describe("TaskTarget lifecycle", () => {
-  let taskId;
-  let ttId;
+  let taskId: string;
+  let ttId: string;
 
   it("create_task for target tests", async () => {
-    const res = await api("/rest/tasks", "POST", {
+    const res = await api<any>("/rest/tasks", "POST", {
       title: "Task for targeting",
       status: "TODO",
       bodyV2: { blocknote: "[]", markdown: "task target test" },
     });
     taskId = res.data.createTask.id;
-    assert.ok(taskId);
+    expect(taskId).toBeTruthy();
   });
 
   it("create_task_target for person", async () => {
-    const res = await api("/rest/taskTargets", "POST", {
+    const res = await api<any>("/rest/taskTargets", "POST", {
       taskId,
       targetPersonId: testPersonId,
     });
     ttId = res.data.createTaskTarget.id;
-    assert.ok(ttId);
-    assert.equal(res.data.createTaskTarget.taskId, taskId);
+    expect(ttId).toBeTruthy();
+    expect(res.data.createTaskTarget.taskId).toBe(taskId);
   });
 
   it("list_task_targets by taskId", async () => {
     const filter = encFilter(`taskId[eq]:${taskId}`);
-    const res = await api(`/rest/taskTargets?filter=${filter}&limit=10`);
-    assert.equal(res.data.taskTargets.length, 1);
-    assert.equal(res.data.taskTargets[0].targetPersonId, testPersonId);
+    const res = await api<any>(`/rest/taskTargets?filter=${filter}&limit=10`);
+    expect(res.data.taskTargets.length).toBe(1);
+    expect(res.data.taskTargets[0].targetPersonId).toBe(testPersonId);
   });
 
   it("list_tasks_for_person via taskTarget filter", async () => {
     const filter = encFilter(`targetPersonId[eq]:${testPersonId}`);
-    const res = await api(`/rest/taskTargets?filter=${filter}&limit=50`);
-    const match = res.data.taskTargets.find((t) => t.taskId === taskId);
-    assert.ok(match, "Should find test task in person's taskTargets");
+    const res = await api<any>(`/rest/taskTargets?filter=${filter}&limit=50`);
+    const match = (res.data.taskTargets as Array<any>).find((t) => t.taskId === taskId);
+    expect(match).toBeTruthy();
   });
 
   it("delete_task_target", async () => {
-    const res = await api(`/rest/taskTargets/${ttId}`, "DELETE");
-    assert.ok(res.data);
+    const res = await api<any>(`/rest/taskTargets/${ttId}`, "DELETE");
+    expect(res.data).toBeTruthy();
   });
 
   it("cleanup: delete_task", async () => {
@@ -397,31 +392,30 @@ describe("TaskTarget lifecycle", () => {
 // ---------------------------------------------------------------------------
 
 describe("Metadata name resolution", () => {
-  let allObjects;
+  let allObjects: Array<{ id: string; nameSingular: string }>;
 
   it("get_metadata_objects", async () => {
-    const res = await api("/rest/metadata/objects");
+    const res = await api<any>("/rest/metadata/objects");
     allObjects = res.data.objects;
-    assert.ok(Array.isArray(allObjects), "Should return objects array");
-    assert.ok(allObjects.length > 0, "Should have at least one object type");
+    expect(Array.isArray(allObjects)).toBe(true);
+    expect(allObjects.length > 0).toBe(true);
   });
 
   it("resolve noteTarget by nameSingular", async () => {
     const nt = allObjects.find((o) => o.nameSingular === "noteTarget");
-    assert.ok(nt, "noteTarget should exist in metadata");
-    // Fetch by UUID to confirm resolution works
-    const res = await api(`/rest/metadata/objects/${nt.id}`);
-    assert.ok(res.data, "Should return metadata for noteTarget");
+    expect(nt).toBeTruthy();
+    const res = await api<any>(`/rest/metadata/objects/${nt!.id}`);
+    expect(res.data).toBeTruthy();
   });
 
   it("resolve taskTarget by nameSingular", async () => {
     const tt = allObjects.find((o) => o.nameSingular === "taskTarget");
-    assert.ok(tt, "taskTarget should exist in metadata");
+    expect(tt).toBeTruthy();
   });
 
   it("resolve person by nameSingular", async () => {
     const p = allObjects.find((o) => o.nameSingular === "person");
-    assert.ok(p, "person should exist in metadata");
+    expect(p).toBeTruthy();
   });
 });
 
@@ -431,56 +425,53 @@ describe("Metadata name resolution", () => {
 
 describe("Search", () => {
   it("search_records returns results", async () => {
-    const res = await api("/rest/people?search=MCPTest&limit=5");
-    assert.ok(Array.isArray(res.data.people));
-    assert.ok(
-      res.data.people.length >= 1,
-      "Should find at least the test person"
-    );
+    const res = await api<any>("/rest/people?search=MCPTest&limit=5");
+    expect(Array.isArray(res.data.people)).toBe(true);
+    expect(res.data.people.length >= 1).toBe(true);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Unit tests for the new helper modules
+// Unit tests for the helper modules
 // ---------------------------------------------------------------------------
 
-import { buildListQuery } from "./src/rest.js";
-import { escapeFilterValue, andExpr, orExpr, combineWithSoftDelete, clause } from "./src/filter.js";
-import { buildWrappedSql } from "./src/psql.js";
-import { transformPersonData, transformCompanyData, transformBodyField } from "./src/transforms.js";
+import { buildListQuery } from "./src/rest.ts";
+import { escapeFilterValue, andExpr, orExpr, combineWithSoftDelete, clause } from "./src/filter.ts";
+import { buildWrappedSql } from "./src/psql.ts";
+import { transformPersonData, transformCompanyData, transformBodyField } from "./src/transforms.ts";
 
-describe("filter.js", () => {
+describe("filter.ts", () => {
   it("escapeFilterValue handles strings, numbers, arrays, null", () => {
-    assert.equal(escapeFilterValue("Enschede"), '"Enschede"');
-    assert.equal(escapeFilterValue(42), "42");
-    assert.equal(escapeFilterValue(true), "true");
-    assert.equal(escapeFilterValue(null), "NULL");
-    assert.equal(escapeFilterValue(["a", "b"]), '["a","b"]');
-    assert.equal(escapeFilterValue('with "quote"'), '"with \\"quote\\""');
+    expect(escapeFilterValue("Enschede")).toBe('"Enschede"');
+    expect(escapeFilterValue(42)).toBe("42");
+    expect(escapeFilterValue(true)).toBe("true");
+    expect(escapeFilterValue(null)).toBe("NULL");
+    expect(escapeFilterValue(["a", "b"])).toBe('["a","b"]');
+    expect(escapeFilterValue('with "quote"')).toBe('"with \\"quote\\""');
   });
 
   it("clause builds field[op]:value", () => {
-    assert.equal(clause("jobTitle", "like", "%architect%"), 'jobTitle[like]:"%architect%"');
-    assert.equal(clause("address.addressCity", "in", ["Enschede", "Hengelo"]), 'address.addressCity[in]:["Enschede","Hengelo"]');
+    expect(clause("jobTitle", "like", "%architect%")).toBe('jobTitle[like]:"%architect%"');
+    expect(clause("address.addressCity", "in", ["Enschede", "Hengelo"])).toBe('address.addressCity[in]:["Enschede","Hengelo"]');
   });
 
   it("andExpr / orExpr compose", () => {
-    assert.equal(andExpr("a[eq]:1"), "a[eq]:1");
-    assert.equal(andExpr("a[eq]:1", "b[eq]:2"), "and(a[eq]:1,b[eq]:2)");
-    assert.equal(orExpr("a[eq]:1", "b[eq]:2", "c[eq]:3"), "or(a[eq]:1,b[eq]:2,c[eq]:3)");
-    assert.equal(andExpr(), null);
+    expect(andExpr("a[eq]:1")).toBe("a[eq]:1");
+    expect(andExpr("a[eq]:1", "b[eq]:2")).toBe("and(a[eq]:1,b[eq]:2)");
+    expect(orExpr("a[eq]:1", "b[eq]:2", "c[eq]:3")).toBe("or(a[eq]:1,b[eq]:2,c[eq]:3)");
+    expect(andExpr()).toBeNull();
   });
 
   it("combineWithSoftDelete appends deletedAt guard", () => {
-    assert.equal(combineWithSoftDelete(null, false), "deletedAt[is]:NULL");
-    assert.equal(combineWithSoftDelete("a[eq]:1", false), "and(a[eq]:1,deletedAt[is]:NULL)");
-    assert.equal(combineWithSoftDelete("a[eq]:1", true), "a[eq]:1");
+    expect(combineWithSoftDelete(null, false)).toBe("deletedAt[is]:NULL");
+    expect(combineWithSoftDelete("a[eq]:1", false)).toBe("and(a[eq]:1,deletedAt[is]:NULL)");
+    expect(combineWithSoftDelete("a[eq]:1", true)).toBe("a[eq]:1");
   });
 });
 
-describe("rest.js buildListQuery", () => {
+describe("rest.ts buildListQuery", () => {
   it("omits unset params", () => {
-    assert.equal(buildListQuery({}), "");
+    expect(buildListQuery({})).toBe("");
   });
   it("encodes filter, limit, cursor, order_by (brackets encoded, parens kept)", () => {
     const qs = buildListQuery({
@@ -489,62 +480,58 @@ describe("rest.js buildListQuery", () => {
       after: "CURSOR",
       order_by: "createdAt[DescNullsFirst]",
     });
-    assert.match(qs, /^\?/);
-    // encodeURIComponent keeps ( ) ' ! * ~ unescaped but encodes [ ] " , etc.
-    assert.match(qs, /filter=and\(a%5Beq%5D%3A%22x%22%2Cb%5Bin%5D%3A%5B1%2C2%5D\)/);
-    assert.match(qs, /limit=50/);
-    assert.match(qs, /starting_after=CURSOR/);
-    assert.match(qs, /order_by=createdAt%5BDescNullsFirst%5D/);
+    expect(qs).toMatch(/^\?/);
+    expect(qs).toMatch(/filter=and\(a%5Beq%5D%3A%22x%22%2Cb%5Bin%5D%3A%5B1%2C2%5D\)/);
+    expect(qs).toMatch(/limit=50/);
+    expect(qs).toMatch(/starting_after=CURSOR/);
+    expect(qs).toMatch(/order_by=createdAt%5BDescNullsFirst%5D/);
   });
   it("passes soft-delete guard through when provided by caller", () => {
     const qs = buildListQuery({ filter: "deletedAt[is]:NULL" });
-    assert.match(qs, /deletedAt%5Bis%5D%3ANULL/);
+    expect(qs).toMatch(/deletedAt%5Bis%5D%3ANULL/);
   });
 });
 
-describe("psql.js safety guard", () => {
+describe("psql.ts safety guard", () => {
   it("wraps sql with read-only settings", () => {
     const out = buildWrappedSql("SELECT 1", "ws_x");
-    assert.match(out, /default_transaction_read_only = on/);
-    assert.match(out, /statement_timeout = '30s'/);
-    assert.match(out, /search_path TO "ws_x"/);
-    assert.match(out, /SELECT 1;/);
+    expect(out).toMatch(/default_transaction_read_only = on/);
+    expect(out).toMatch(/statement_timeout = '30s'/);
+    expect(out).toMatch(/search_path TO "ws_x"/);
+    expect(out).toMatch(/SELECT 1;/);
   });
 
   it("assertReadonly rejects writes via runReadonlySql", async () => {
-    const { runReadonlySql } = await import("./src/psql.js");
-    // DELETE/INSERT don't start with SELECT — caught by the opening-keyword check first.
-    await assert.rejects(() => runReadonlySql("DELETE FROM person"), /must start with SELECT/);
-    await assert.rejects(() => runReadonlySql("INSERT INTO person VALUES (1)"), /must start with SELECT/);
-    // Multi-statement with DROP in the second: the FORBIDDEN keyword check fires first.
-    await assert.rejects(() => runReadonlySql("SELECT 1; DROP TABLE x"), /forbidden keyword/);
-    // Two pure SELECTs — caught by the multi-statement guard.
-    await assert.rejects(() => runReadonlySql("SELECT 1; SELECT 2"), /Multiple statements/);
-    await assert.rejects(() => runReadonlySql(""), /SQL is empty/);
+    const { runReadonlySql } = await import("./src/psql.ts");
+    expect(runReadonlySql("DELETE FROM person")).rejects.toThrow(/must start with SELECT/);
+    expect(runReadonlySql("INSERT INTO person VALUES (1)")).rejects.toThrow(/must start with SELECT/);
+    expect(runReadonlySql("SELECT 1; DROP TABLE x")).rejects.toThrow(/forbidden keyword/);
+    expect(runReadonlySql("SELECT 1; SELECT 2")).rejects.toThrow(/Multiple statements/);
+    expect(runReadonlySql("")).rejects.toThrow(/SQL is empty/);
   });
 });
 
-describe("transforms.js", () => {
+describe("transforms.ts", () => {
   it("transformPersonData maps flat → composite", () => {
     const t = transformPersonData({ firstName: "A", lastName: "B", email: "a@b.c", phone: "0612345678", linkedinUrl: "https://li.example" });
-    assert.deepEqual(t.name, { firstName: "A", lastName: "B" });
-    assert.deepEqual(t.emails, { primaryEmail: "a@b.c" });
-    assert.deepEqual(t.phones, { primaryPhoneNumber: "0612345678" });
-    assert.equal(t.firstName, undefined);
-    assert.equal(t.email, undefined);
+    expect(t.name).toEqual({ firstName: "A", lastName: "B" });
+    expect(t.emails).toEqual({ primaryEmail: "a@b.c" });
+    expect(t.phones).toEqual({ primaryPhoneNumber: "0612345678" });
+    expect(t.firstName).toBeUndefined();
+    expect(t.email).toBeUndefined();
   });
 
   it("transformCompanyData wraps domainName string", () => {
     const t = transformCompanyData({ name: "X", domainName: "example.nl" });
-    assert.equal(t.domainName.primaryLinkUrl, "https://example.nl");
+    expect((t.domainName as any).primaryLinkUrl).toBe("https://example.nl");
   });
 
   it("transformBodyField builds bodyV2 with blocknote + markdown", () => {
     const t = transformBodyField({ body: "Line 1\nLine 2" });
-    assert.ok(t.bodyV2.blocknote);
-    const blocks = JSON.parse(t.bodyV2.blocknote);
-    assert.equal(blocks.length, 2);
-    assert.equal(blocks[0].content[0].text, "Line 1");
-    assert.equal(t.bodyV2.markdown, "Line 1\nLine 2");
+    expect((t.bodyV2 as any).blocknote).toBeTruthy();
+    const blocks = JSON.parse((t.bodyV2 as any).blocknote);
+    expect(blocks.length).toBe(2);
+    expect(blocks[0].content[0].text).toBe("Line 1");
+    expect((t.bodyV2 as any).markdown).toBe("Line 1\nLine 2");
   });
 });

@@ -24,16 +24,17 @@
 // "noteTarget", task, "taskTarget", opportunity.
 
 import { spawn } from "node:child_process";
+import type { Client as PgClient } from "pg";
 
 const DEFAULT_CONTAINER = process.env.TWENTY_DB_CONTAINER || "twenty-db-1";
-const DEFAULT_DB_HOST   = process.env.TWENTY_DB_HOST || null; // null → fall back to docker exec
-const DEFAULT_DB_PORT   = Number(process.env.TWENTY_DB_PORT || 5432);
-const DEFAULT_DB_USER   = process.env.TWENTY_DB_USER || "postgres";
+const DEFAULT_DB_HOST: string | null = process.env.TWENTY_DB_HOST || null; // null → fall back to docker exec
+const DEFAULT_DB_PORT = Number(process.env.TWENTY_DB_PORT || 5432);
+const DEFAULT_DB_USER = process.env.TWENTY_DB_USER || "postgres";
 const DEFAULT_DB_PASSWORD = process.env.TWENTY_DB_PASSWORD || "postgres";
-const DEFAULT_DB_NAME   = process.env.TWENTY_DB_NAME || "default";
-const DEFAULT_SCHEMA    = process.env.TWENTY_WORKSPACE_SCHEMA || "workspace_ekaz483h19r9108ifrotkvj69";
-const MAX_ROWS          = 10_000;
-const EXEC_TIMEOUT_MS   = 60_000;
+const DEFAULT_DB_NAME = process.env.TWENTY_DB_NAME || "default";
+const DEFAULT_SCHEMA = process.env.TWENTY_WORKSPACE_SCHEMA || "workspace_ekaz483h19r9108ifrotkvj69";
+const MAX_ROWS = 10_000;
+const EXEC_TIMEOUT_MS = 60_000;
 const STATEMENT_TIMEOUT = "30s";
 
 const FORBIDDEN = new RegExp(
@@ -46,10 +47,10 @@ const FORBIDDEN = new RegExp(
       "cluster", "reset",
     ].join("|") +
   String.raw`)\b`,
-  "i"
+  "i",
 );
 
-function assertReadonly(sql) {
+function assertReadonly(sql: string): void {
   const stripped = sql
     .replace(/--[^\n]*/g, " ")
     .replace(/\/\*[\s\S]*?\*\//g, " ");
@@ -58,7 +59,7 @@ function assertReadonly(sql) {
 
   if (!/^(\s*)(select|with|explain|values|table|show)\b/i.test(normalized)) {
     throw new Error(
-      "SQL must start with SELECT, WITH, EXPLAIN, VALUES, TABLE, or SHOW. Write operations are not permitted."
+      "SQL must start with SELECT, WITH, EXPLAIN, VALUES, TABLE, or SHOW. Write operations are not permitted.",
     );
   }
   const forbidden = normalized.match(FORBIDDEN);
@@ -71,7 +72,7 @@ function assertReadonly(sql) {
   }
 }
 
-export function buildWrappedSql(userSql, schema = DEFAULT_SCHEMA) {
+export function buildWrappedSql(userSql: string, schema: string = DEFAULT_SCHEMA): string {
   const inner = userSql.trim().replace(/;\s*$/, "");
   return [
     "SET default_transaction_read_only = on;",
@@ -81,37 +82,63 @@ export function buildWrappedSql(userSql, schema = DEFAULT_SCHEMA) {
   ].join(" ");
 }
 
+export interface SqlResult {
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  rowCount: number;
+  truncated: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Backend 1 — pg over TCP
 // ---------------------------------------------------------------------------
-let _pgModule = null;
-async function getPg() {
+type PgModule = { Client: new (config: ConstructorParameters<typeof PgClient>[0]) => PgClient };
+let _pgModule: PgModule | null = null;
+async function getPg(): Promise<PgModule> {
   if (_pgModule) return _pgModule;
   try {
-    _pgModule = (await import("pg")).default;
+    const mod = await import("pg");
+    _pgModule = (mod.default ?? mod) as unknown as PgModule;
     return _pgModule;
-  } catch (err) {
+  } catch {
     throw new Error(
       "pg package not installed (required when TWENTY_DB_HOST is set). " +
-      "Run `npm install pg` in the twenty-crm-mcp-server directory."
+      "Run `bun install` in the twenty-crm-mcp-server directory.",
     );
   }
 }
 
-async function runViaPg(userSql, { host, port, user, password, database, schema }) {
+interface PgRunOptions {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+  schema: string;
+}
+
+async function runViaPg(userSql: string, opts: PgRunOptions): Promise<SqlResult> {
   const pg = await getPg();
-  const client = new pg.Client({ host, port, user, password, database, statement_timeout: 30_000, connectionTimeoutMillis: 10_000 });
+  const client = new pg.Client({
+    host: opts.host,
+    port: opts.port,
+    user: opts.user,
+    password: opts.password,
+    database: opts.database,
+    statement_timeout: 30_000,
+    connectionTimeoutMillis: 10_000,
+  });
   await client.connect();
   try {
     await client.query("SET default_transaction_read_only = on");
-    await client.query(`SET search_path TO "${schema}", public`);
+    await client.query(`SET search_path TO "${opts.schema}", public`);
     const cleanSql = userSql.trim().replace(/;\s*$/, "");
     const result = await client.query(cleanSql);
     const columns = result.fields.map((f) => f.name);
     const rowCount = Math.min(result.rows.length, MAX_ROWS);
-    const rows = result.rows.slice(0, MAX_ROWS).map((r) => {
+    const rows = result.rows.slice(0, MAX_ROWS).map((r: Record<string, unknown>) => {
       // Coerce values to primitives / strings for JSON transport.
-      const out = {};
+      const out: Record<string, unknown> = {};
       for (const col of columns) {
         const v = r[col];
         out[col] = v === null || v === undefined ? null
@@ -123,23 +150,25 @@ async function runViaPg(userSql, { host, port, user, password, database, schema 
     });
     return { columns, rows, rowCount, truncated: result.rows.length > MAX_ROWS };
   } finally {
-    await client.end().catch(() => {});
+    await client.end().catch(() => { /* swallow */ });
   }
 }
 
 // ---------------------------------------------------------------------------
 // Backend 2 — docker exec twenty-db-1 psql (host-side fallback)
 // ---------------------------------------------------------------------------
-function runDocker(args, timeoutMs = EXEC_TIMEOUT_MS) {
+interface DockerResult { stdout: string; stderr: string }
+
+function runDocker(args: string[], timeoutMs = EXEC_TIMEOUT_MS): Promise<DockerResult> {
   return new Promise((resolve, reject) => {
     const proc = spawn("docker", args, { stdio: ["ignore", "pipe", "pipe"] });
-    const stdoutChunks = [];
-    const stderrChunks = [];
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; proc.kill("SIGKILL"); }, timeoutMs);
 
-    proc.stdout.on("data", (c) => stdoutChunks.push(c));
-    proc.stderr.on("data", (c) => stderrChunks.push(c));
+    proc.stdout!.on("data", (c: Buffer) => stdoutChunks.push(c));
+    proc.stderr!.on("data", (c: Buffer) => stderrChunks.push(c));
     proc.on("error", (err) => { clearTimeout(timer); reject(err); });
     proc.on("close", (code) => {
       clearTimeout(timer);
@@ -152,11 +181,18 @@ function runDocker(args, timeoutMs = EXEC_TIMEOUT_MS) {
   });
 }
 
-async function runViaDocker(userSql, { container, dbUser, dbName, schema }) {
-  const wrapped = buildWrappedSql(userSql, schema);
+interface DockerRunOptions {
+  container: string;
+  dbUser: string;
+  dbName: string;
+  schema: string;
+}
+
+async function runViaDocker(userSql: string, opts: DockerRunOptions): Promise<SqlResult> {
+  const wrapped = buildWrappedSql(userSql, opts.schema);
   const args = [
-    "exec", "-i", container,
-    "psql", "-U", dbUser, "-d", dbName,
+    "exec", "-i", opts.container,
+    "psql", "-U", opts.dbUser, "-d", opts.dbName,
     "-X", "-q", "-A", "-F", "\t",
     "--pset=footer=off",
     "-c", wrapped,
@@ -164,12 +200,12 @@ async function runViaDocker(userSql, { container, dbUser, dbName, schema }) {
   const { stdout } = await runDocker(args);
   const lines = stdout.split("\n").filter((l) => l.length > 0);
   if (lines.length === 0) return { columns: [], rows: [], rowCount: 0, truncated: false };
-  const columns = lines[0].split("\t");
+  const columns = lines[0]!.split("\t");
   const dataLines = lines.slice(1);
   const truncated = dataLines.length > MAX_ROWS;
   const rows = dataLines.slice(0, MAX_ROWS).map((line) => {
     const cells = line.split("\t");
-    const row = {};
+    const row: Record<string, unknown> = {};
     columns.forEach((col, i) => { row[col] = cells[i] === undefined ? null : cells[i]; });
     return row;
   });
@@ -179,7 +215,17 @@ async function runViaDocker(userSql, { container, dbUser, dbName, schema }) {
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
-export async function runReadonlySql(userSql, overrides = {}) {
+export interface ReadonlySqlOverrides {
+  schema?: string;
+  host?: string;
+  port?: number;
+  dbUser?: string;
+  dbPassword?: string;
+  dbName?: string;
+  container?: string;
+}
+
+export async function runReadonlySql(userSql: string, overrides: ReadonlySqlOverrides = {}): Promise<SqlResult> {
   assertReadonly(userSql);
   const schema = overrides.schema ?? DEFAULT_SCHEMA;
 
@@ -210,4 +256,4 @@ export const psqlDefaults = {
   dbUser: DEFAULT_DB_USER,
   dbName: DEFAULT_DB_NAME,
   schema: DEFAULT_SCHEMA,
-};
+} as const;

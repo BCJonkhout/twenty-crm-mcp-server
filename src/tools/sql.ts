@@ -1,5 +1,7 @@
-import { runReadonlySql, psqlDefaults } from "../psql.js";
-import { text } from "./_render.js";
+import { runReadonlySql, psqlDefaults } from "../psql.ts";
+import { text } from "./_render.ts";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { ToolHandler } from "../types.ts";
 
 const DESCRIPTION = `Run a read-only SQL query against the Twenty Postgres database (inside the twenty-db-1 container).
 
@@ -43,7 +45,7 @@ Examples:
       WHERE "prudaiMarketingSendgridCategory" = 'Vera_campagne_architecten_landelijk'
       ORDER BY "prudaiMarketingLastTouchAt" DESC NULLS LAST LIMIT 20`;
 
-export const definitions = [
+export const definitions: Tool[] = [
   {
     name: "run_sql_readonly",
     description: DESCRIPTION,
@@ -57,9 +59,11 @@ export const definitions = [
   },
 ];
 
-export function createHandlers() {
+export function createHandlers(_client?: unknown): Record<string, ToolHandler> {
+  void _client;
   return {
-    run_sql_readonly: async ({ sql }) => {
+    run_sql_readonly: async (args) => {
+      const { sql } = args as { sql: string };
       const result = await runReadonlySql(sql);
       return text("SQL result:", {
         schema: psqlDefaults.schema,

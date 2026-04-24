@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -7,28 +7,30 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { createRestClient } from "./src/rest.js";
+import { createRestClient } from "./rest.ts";
+import type { ToolHandler, ToolModule } from "./types.ts";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
-import * as peopleTools from "./src/tools/people.js";
-import * as companyTools from "./src/tools/companies.js";
-import * as noteTools from "./src/tools/notes.js";
-import * as taskTools from "./src/tools/tasks.js";
-import * as targetTools from "./src/tools/targets.js";
-import * as queryTools from "./src/tools/query.js";
-import * as aggregateTools from "./src/tools/aggregate.js";
-import * as sqlTools from "./src/tools/sql.js";
-import * as graphqlTools from "./src/tools/graphql.js";
-import * as batchTools from "./src/tools/batch.js";
-import * as mergeTools from "./src/tools/merge.js";
-import * as accessTools from "./src/tools/access.js";
+import * as peopleTools from "./tools/people.ts";
+import * as companyTools from "./tools/companies.ts";
+import * as noteTools from "./tools/notes.ts";
+import * as taskTools from "./tools/tasks.ts";
+import * as targetTools from "./tools/targets.ts";
+import * as queryTools from "./tools/query.ts";
+import * as aggregateTools from "./tools/aggregate.ts";
+import * as sqlTools from "./tools/sql.ts";
+import * as graphqlTools from "./tools/graphql.ts";
+import * as batchTools from "./tools/batch.ts";
+import * as mergeTools from "./tools/merge.ts";
+import * as accessTools from "./tools/access.ts";
 
-const TOOL_MODULES = [
+const TOOL_MODULES: ToolModule[] = [
   peopleTools, companyTools, noteTools, taskTools, targetTools,
   queryTools, aggregateTools, sqlTools, graphqlTools,
   batchTools, mergeTools, accessTools,
 ];
 
-async function main() {
+async function main(): Promise<void> {
   const apiKey = process.env.TWENTY_API_KEY;
   const baseUrl = process.env.TWENTY_BASE_URL || "https://api.twenty.com";
   if (!apiKey) throw new Error("TWENTY_API_KEY environment variable is required");
@@ -36,12 +38,12 @@ async function main() {
   const client = createRestClient({ apiKey, baseUrl });
 
   const server = new Server(
-    { name: "twenty-crm", version: "0.2.0" },
-    { capabilities: { tools: {} } }
+    { name: "twenty-crm", version: "0.3.0" },
+    { capabilities: { tools: {} } },
   );
 
-  const definitions = [];
-  const handlers = {};
+  const definitions: Tool[] = [];
+  const handlers: Record<string, ToolHandler> = {};
   for (const mod of TOOL_MODULES) {
     for (const def of mod.definitions) {
       if (handlers[def.name]) throw new Error(`Duplicate tool name: ${def.name}`);
@@ -64,7 +66,7 @@ async function main() {
     try {
       return await handler(args ?? {});
     } catch (err) {
-      return { content: [{ type: "text", text: `Error: ${err.message}` }] };
+      return { content: [{ type: "text", text: `Error: ${(err as Error).message}` }] };
     }
   });
 

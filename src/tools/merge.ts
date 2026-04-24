@@ -1,10 +1,23 @@
-import { buildListQuery } from "../rest.js";
-import { createTargetsForRecord } from "../transforms.js";
-import { text } from "./_render.js";
+import { buildListQuery, type RestClient } from "../rest.ts";
+import { createTargetsForRecord } from "../transforms.ts";
+import { text } from "./_render.ts";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { ToolHandler } from "../types.ts";
 
-async function listAllTargets(client, kind, personId) {
-  const rows = [];
-  let after = null;
+interface TargetRow {
+  id: string;
+  noteId?: string;
+  taskId?: string;
+}
+
+interface TargetsListResponse {
+  data?: { noteTargets?: TargetRow[]; taskTargets?: TargetRow[] };
+  pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+}
+
+async function listAllTargets(client: RestClient, kind: "noteTargets" | "taskTargets", personId: string): Promise<TargetRow[]> {
+  const rows: TargetRow[] = [];
+  let after: string | null = null;
   while (true) {
     const qs = buildListQuery({
       filter: `targetPersonId[eq]:"${personId}"`,
@@ -12,8 +25,8 @@ async function listAllTargets(client, kind, personId) {
       after,
       include_deleted: true,
     });
-    const r = await client.request(`/rest/${kind}${qs}`);
-    const page = r?.data?.[kind] ?? [];
+    const r = await client.request<TargetsListResponse>(`/rest/${kind}${qs}`);
+    const page: TargetRow[] = r?.data?.[kind] ?? [];
     rows.push(...page);
     const pageInfo = r?.pageInfo ?? {};
     if (!pageInfo.hasNextPage || !pageInfo.endCursor) break;
@@ -22,7 +35,7 @@ async function listAllTargets(client, kind, personId) {
   return rows;
 }
 
-export const definitions = [
+export const definitions: Tool[] = [
   {
     name: "merge_people",
     description: `Merge duplicate person records into one primary. Re-points every noteTarget / taskTarget from duplicates to the primary, copies over any field that is null on primary, then soft-deletes the duplicates.
@@ -68,17 +81,26 @@ Example:
   },
 ];
 
-export function createHandlers(client) {
+interface PersonRecord {
+  [key: string]: unknown;
+}
+
+interface PersonGetResponse {
+  data?: { person?: PersonRecord };
+}
+
+export function createHandlers(client: RestClient): Record<string, ToolHandler> {
   return {
-    merge_people: async ({ primaryId, duplicateIds }) => {
+    merge_people: async (args) => {
+      const { primaryId, duplicateIds } = args as { primaryId: string; duplicateIds: string[] };
       if (!primaryId) throw new Error("primaryId is required");
       if (!Array.isArray(duplicateIds) || duplicateIds.length === 0) throw new Error("duplicateIds must be a non-empty array");
-      const primary = (await client.request(`/rest/people/${primaryId}`))?.data?.person ?? null;
+      const primary = (await client.request<PersonGetResponse>(`/rest/people/${primaryId}`))?.data?.person ?? null;
       if (!primary) throw new Error(`primary ${primaryId} not found`);
 
-      const report = [];
+      const report: Array<Record<string, unknown>> = [];
       for (const dupId of duplicateIds) {
-        const dup = (await client.request(`/rest/people/${dupId}`))?.data?.person;
+        const dup = (await client.request<PersonGetResponse>(`/rest/people/${dupId}`))?.data?.person;
         if (!dup) {
           report.push({ dupId, error: "not found" });
           continue;
@@ -99,13 +121,13 @@ export function createHandlers(client) {
         }
 
         // 2. Copy over null-on-primary fields from duplicate
-        const patch = {};
+        const patch: Record<string, unknown> = {};
         const skip = new Set(["id", "createdAt", "updatedAt", "deletedAt", "searchVector", "createdBy", "updatedBy", "position"]);
         for (const [k, v] of Object.entries(dup)) {
           if (skip.has(k)) continue;
           const primVal = primary[k];
           const primEmpty = primVal === null || primVal === undefined || primVal === "" ||
-            (typeof primVal === "object" && Object.values(primVal).every((x) => x === null || x === "" || (Array.isArray(x) && x.length === 0)));
+            (typeof primVal === "object" && primVal !== null && Object.values(primVal as Record<string, unknown>).every((x) => x === null || x === "" || (Array.isArray(x) && x.length === 0)));
           const dupHas = v !== null && v !== undefined && v !== "";
           if (primEmpty && dupHas) patch[k] = v;
         }
@@ -120,12 +142,14 @@ export function createHandlers(client) {
       return text("merge_people:", { primaryId, report });
     },
 
-    link_person_to_company: async ({ personId, companyId }) => {
+    link_person_to_company: async (args) => {
+      const { personId, companyId } = args as { personId: string; companyId: string };
       const r = await client.request(`/rest/people/${personId}`, { method: "PATCH", body: { companyId } });
       return text(`Linked ${personId} → company ${companyId}:`, r);
     },
 
-    bulk_attach_note: async ({ noteId, personIds = [], companyIds = [] }) => {
+    bulk_attach_note: async (args) => {
+      const { noteId, personIds = [], companyIds = [] } = args as { noteId: string; personIds?: string[]; companyIds?: string[] };
       if (!personIds.length && !companyIds.length) throw new Error("Provide at least one of personIds / companyIds");
       const created = await createTargetsForRecord(client, "note", noteId, personIds, companyIds);
       return text(`bulk_attach_note (${created.length} targets):`, created);

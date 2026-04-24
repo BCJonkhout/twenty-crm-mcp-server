@@ -10,9 +10,9 @@ git clone https://github.com/your-username/twenty-crm-mcp-server.git
 cd twenty-crm-mcp-server
 ```
 
-2. **Install dependencies**:
+2. **Install dependencies** (Bun ≥ 1.3 required — runs the TypeScript source directly):
 ```bash
-npm install
+bun install
 ```
 
 3. **Set up environment variables**:
@@ -23,7 +23,9 @@ Edit `.env` with your Twenty CRM API key and base URL.
 
 4. **Test your setup**:
 ```bash
-npm test
+bun run typecheck   # tsc --noEmit (strict)
+bun test            # unit + E2E
+bun run smoke       # end-to-end MCP stdio smoke
 ```
 
 ## How to Contribute
@@ -36,7 +38,7 @@ Before creating an issue, please:
 2. **Use the issue templates** provided
 3. **Include relevant details**:
    - Twenty CRM version (cloud/self-hosted)
-   - Node.js version
+   - Bun version (`bun --version`)
    - Error messages and stack traces
    - Steps to reproduce
 
@@ -60,7 +62,7 @@ We welcome feature suggestions! Please:
 #### Development Guidelines
 
 **Code Style**:
-- Use ES modules (`import`/`export`)
+- TypeScript ES modules (`import`/`export`); `tsc --noEmit` must pass under `strict`
 - Follow existing naming conventions
 - Add JSDoc comments for new functions
 - Keep functions focused and small
@@ -89,8 +91,8 @@ git checkout -b feature/your-feature-name
 
 3. **Test thoroughly**:
 ```bash
-npm test
-npm run lint
+bun run typecheck
+bun test
 ```
 
 4. **Commit with clear messages**:
@@ -133,7 +135,6 @@ Then create a pull request with:
 - **Data Enrichment**: Integration with external data sources
 - **Workflow Triggers**: Automated actions based on events
 - **Performance Optimization**: Caching and rate limiting
-- **TypeScript Support**: Full type definitions
 - **Additional Object Types**: Support for opportunities, custom objects
 
 ### Areas for Contribution

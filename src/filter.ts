@@ -12,7 +12,15 @@
 //   Soft-delete guard: deletedAt[is]:NULL  (or deletedAt[is]:NOT_NULL)
 //   Cursor pagination:  starting_after=<endCursor> | ending_before=<startCursor>
 
-export function escapeFilterValue(value) {
+export type FilterValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | readonly FilterValue[];
+
+export function escapeFilterValue(value: FilterValue): string {
   if (value === null || value === undefined) return "NULL";
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   if (Array.isArray(value)) {
@@ -23,27 +31,27 @@ export function escapeFilterValue(value) {
   return `"${s}"`;
 }
 
-export function clause(field, op, value) {
+export function clause(field: string, op: string, value: FilterValue): string {
   const operator = op.startsWith("[") ? op : `[${op}]`;
   return `${field}${operator}:${escapeFilterValue(value)}`;
 }
 
-export function andExpr(...clauses) {
-  const flat = clauses.filter(Boolean);
+export function andExpr(...clauses: Array<string | null | undefined | false>): string | null {
+  const flat = clauses.filter((c): c is string => Boolean(c));
   if (flat.length === 0) return null;
-  if (flat.length === 1) return flat[0];
+  if (flat.length === 1) return flat[0]!;
   return `and(${flat.join(",")})`;
 }
 
-export function orExpr(...clauses) {
-  const flat = clauses.filter(Boolean);
+export function orExpr(...clauses: Array<string | null | undefined | false>): string | null {
+  const flat = clauses.filter((c): c is string => Boolean(c));
   if (flat.length === 0) return null;
-  if (flat.length === 1) return flat[0];
+  if (flat.length === 1) return flat[0]!;
   return `or(${flat.join(",")})`;
 }
 
 // Compose an outer filter and extra soft-delete guard without nesting "and(and(...))".
-export function combineWithSoftDelete(filterExpr, includeDeleted) {
+export function combineWithSoftDelete(filterExpr: string | null, includeDeleted: boolean): string | null {
   if (includeDeleted) return filterExpr || null;
   const guard = "deletedAt[is]:NULL";
   if (!filterExpr) return guard;

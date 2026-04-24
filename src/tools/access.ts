@@ -1,9 +1,11 @@
-import { buildListQuery } from "../rest.js";
-import { text } from "./_render.js";
+import { buildListQuery, type RestClient } from "../rest.ts";
+import { text } from "./_render.ts";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { ToolHandler } from "../types.ts";
 
 // Per-object-type default ownership field. Extend if custom objects use
 // their own relation name.
-const OWNER_FIELD_BY_OBJECT = {
+const OWNER_FIELD_BY_OBJECT: Record<string, string> = {
   companies: "accountOwnerId",
   opportunities: "ownerId",
   tasks: "assigneeId",
@@ -43,7 +45,30 @@ Examples:
       recordId: "<uuid>"
       memberId: null`;
 
-async function resolveMember(client, { memberId, memberEmail, memberName }) {
+interface WorkspaceMember {
+  id: string;
+  name?: { firstName?: string; lastName?: string };
+  userEmail?: string;
+  colorScheme?: string;
+}
+
+interface MembersListResponse {
+  data?: { workspaceMembers?: WorkspaceMember[] };
+}
+
+interface ResolveMemberArgs {
+  memberId?: string | null;
+  memberEmail?: string;
+  memberName?: string;
+}
+
+interface ResolvedMember {
+  id: string | null;
+  name?: { firstName?: string; lastName?: string };
+  userEmail?: string;
+}
+
+async function resolveMember(client: RestClient, { memberId, memberEmail, memberName }: ResolveMemberArgs): Promise<ResolvedMember> {
   if (memberId === null) return { id: null }; // explicit unset
   if (memberId) return { id: memberId };
 
@@ -53,7 +78,7 @@ async function resolveMember(client, { memberId, memberEmail, memberName }) {
       limit: 1,
       include_deleted: true,
     });
-    const r = await client.request(`/rest/workspaceMembers${qs}`);
+    const r = await client.request<MembersListResponse>(`/rest/workspaceMembers${qs}`);
     const m = r?.data?.workspaceMembers?.[0];
     if (!m) throw new Error(`No workspace member with userEmail="${memberEmail}"`);
     return m;
@@ -61,7 +86,7 @@ async function resolveMember(client, { memberId, memberEmail, memberName }) {
 
   if (memberName) {
     // Fetch all members and filter client-side — there are typically <20.
-    const r = await client.request(`/rest/workspaceMembers?limit=200`);
+    const r = await client.request<MembersListResponse>(`/rest/workspaceMembers?limit=200`);
     const members = r?.data?.workspaceMembers ?? [];
     const needle = memberName.toLowerCase();
     const match = members.filter((m) => {
@@ -76,13 +101,13 @@ async function resolveMember(client, { memberId, memberEmail, memberName }) {
       const options = match.map((m) => `${m.id} (${m.name?.firstName} ${m.name?.lastName} <${m.userEmail}>)`).join(", ");
       throw new Error(`Ambiguous memberName="${memberName}" — matched ${match.length}: ${options}. Use memberEmail or memberId instead.`);
     }
-    return match[0];
+    return match[0]!;
   }
 
   throw new Error("Provide one of: memberId, memberEmail, memberName (or memberId: null to unset).");
 }
 
-export const definitions = [
+export const definitions: Tool[] = [
   {
     name: "list_workspace_members",
     description: LIST_MEMBERS_DESCRIPTION,
@@ -112,10 +137,16 @@ export const definitions = [
   },
 ];
 
-export function createHandlers(client) {
+interface AssignOwnerArgs extends ResolveMemberArgs {
+  objectType?: string;
+  recordId?: string;
+  ownerField?: string;
+}
+
+export function createHandlers(client: RestClient): Record<string, ToolHandler> {
   return {
     list_workspace_members: async () => {
-      const r = await client.request("/rest/workspaceMembers?limit=200");
+      const r = await client.request<MembersListResponse>("/rest/workspaceMembers?limit=200");
       const members = r?.data?.workspaceMembers ?? [];
       const slim = members.map((m) => ({
         id: m.id,
@@ -126,14 +157,15 @@ export function createHandlers(client) {
       return text(`Workspace members (${slim.length}):`, slim);
     },
 
-    assign_owner: async ({ objectType, recordId, memberId, memberEmail, memberName, ownerField }) => {
+    assign_owner: async (args) => {
+      const { objectType, recordId, memberId, memberEmail, memberName, ownerField } = (args ?? {}) as AssignOwnerArgs;
       if (!objectType) throw new Error("objectType is required");
       if (!recordId) throw new Error("recordId is required");
 
       const field = ownerField ?? OWNER_FIELD_BY_OBJECT[objectType];
       if (!field) {
         throw new Error(
-          `No default owner field known for objectType="${objectType}". Pass ownerField explicitly (e.g. 'accountOwnerId', 'ownerId', 'assigneeId').`
+          `No default owner field known for objectType="${objectType}". Pass ownerField explicitly (e.g. 'accountOwnerId', 'ownerId', 'assigneeId').`,
         );
       }
 

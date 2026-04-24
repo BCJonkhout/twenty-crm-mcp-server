@@ -1,7 +1,9 @@
-import { buildListQuery } from "../rest.js";
-import { text, ok } from "./_render.js";
+import { buildListQuery, type RestClient } from "../rest.ts";
+import { text, ok } from "./_render.ts";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { ToolHandler } from "../types.ts";
 
-export const definitions = [
+export const definitions: Tool[] = [
   {
     name: "create_note_target",
     description: "Link a note to a person, company, or opportunity.",
@@ -88,13 +90,37 @@ export const definitions = [
   },
 ];
 
-export function createHandlers(client) {
-  const listTargets = async (objectPath, idShortcut, idField, args) => {
+interface TargetListArgs {
+  filter?: string;
+  order_by?: string;
+  limit?: number;
+  starting_after?: string;
+  noteId?: string;
+  taskId?: string;
+}
+
+interface TargetRow {
+  id: string;
+  noteId?: string;
+  taskId?: string;
+}
+
+interface TargetListResponse {
+  data?: { noteTargets?: TargetRow[]; taskTargets?: TargetRow[] };
+}
+
+export function createHandlers(client: RestClient): Record<string, ToolHandler> {
+  const listTargets = async (
+    objectPath: "noteTargets" | "taskTargets",
+    idShortcut: string | undefined,
+    idField: "noteId" | "taskId",
+    args: TargetListArgs,
+  ) => {
     const { filter, order_by, limit = 50, starting_after } = args ?? {};
-    const clauses = [];
+    const clauses: string[] = [];
     if (filter) clauses.push(filter);
     if (idShortcut) clauses.push(`${idField}[eq]:"${idShortcut}"`);
-    const combined = clauses.length === 0 ? null : clauses.length === 1 ? clauses[0] : `and(${clauses.join(",")})`;
+    const combined = clauses.length === 0 ? null : clauses.length === 1 ? clauses[0]! : `and(${clauses.join(",")})`;
     const qs = buildListQuery({ filter: combined, order_by, limit, after: starting_after, include_deleted: true });
     return text(`${objectPath}:`, await client.request(`/rest/${objectPath}${qs}`));
   };
@@ -102,54 +128,64 @@ export function createHandlers(client) {
   return {
     create_note_target: async (args) =>
       text("Created noteTarget:", await client.request("/rest/noteTargets", { method: "POST", body: args })),
-    list_note_targets: async (args = {}) => listTargets("noteTargets", args.noteId, "noteId", args),
-    delete_note_target: async ({ id }) => {
+    list_note_targets: async (args) => {
+      const a = (args ?? {}) as TargetListArgs;
+      return listTargets("noteTargets", a.noteId, "noteId", a);
+    },
+    delete_note_target: async (args) => {
+      const { id } = args as { id: string };
       await client.request(`/rest/noteTargets/${id}`, { method: "DELETE" });
       return ok(`Deleted noteTarget ${id}`);
     },
     create_task_target: async (args) =>
       text("Created taskTarget:", await client.request("/rest/taskTargets", { method: "POST", body: args })),
-    list_task_targets: async (args = {}) => listTargets("taskTargets", args.taskId, "taskId", args),
-    delete_task_target: async ({ id }) => {
+    list_task_targets: async (args) => {
+      const a = (args ?? {}) as TargetListArgs;
+      return listTargets("taskTargets", a.taskId, "taskId", a);
+    },
+    delete_task_target: async (args) => {
+      const { id } = args as { id: string };
       await client.request(`/rest/taskTargets/${id}`, { method: "DELETE" });
       return ok(`Deleted taskTarget ${id}`);
     },
-    list_notes_for_person: async ({ personId, limit = 50 }) => {
+    list_notes_for_person: async (args) => {
+      const { personId, limit = 50 } = args as { personId: string; limit?: number };
       const qs = buildListQuery({
         filter: `targetPersonId[eq]:"${personId}"`,
         limit,
         include_deleted: true,
       });
-      const targetsResult = await client.request(`/rest/noteTargets${qs}`);
+      const targetsResult = await client.request<TargetListResponse>(`/rest/noteTargets${qs}`);
       const targets = targetsResult?.data?.noteTargets ?? [];
       if (targets.length === 0) return ok(`No notes found for person ${personId}`);
-      const notes = [];
+      const notes: unknown[] = [];
       for (const t of targets) {
         try {
-          const note = await client.request(`/rest/notes/${t.noteId}`);
-          notes.push({ ...(note?.data ?? note), noteTargetId: t.id });
+          const note = await client.request<{ data?: unknown }>(`/rest/notes/${t.noteId}`);
+          notes.push({ ...((note?.data ?? note) as Record<string, unknown>), noteTargetId: t.id });
         } catch (e) {
-          notes.push({ noteId: t.noteId, error: e.message });
+          notes.push({ noteId: t.noteId, error: (e as Error).message });
         }
       }
       return text(`Notes for person ${personId} (${notes.length}):`, notes);
     },
-    list_tasks_for_person: async ({ personId, limit = 50 }) => {
+    list_tasks_for_person: async (args) => {
+      const { personId, limit = 50 } = args as { personId: string; limit?: number };
       const qs = buildListQuery({
         filter: `targetPersonId[eq]:"${personId}"`,
         limit,
         include_deleted: true,
       });
-      const targetsResult = await client.request(`/rest/taskTargets${qs}`);
+      const targetsResult = await client.request<TargetListResponse>(`/rest/taskTargets${qs}`);
       const targets = targetsResult?.data?.taskTargets ?? [];
       if (targets.length === 0) return ok(`No tasks found for person ${personId}`);
-      const tasks = [];
+      const tasks: unknown[] = [];
       for (const t of targets) {
         try {
-          const task = await client.request(`/rest/tasks/${t.taskId}`);
-          tasks.push({ ...(task?.data ?? task), taskTargetId: t.id });
+          const task = await client.request<{ data?: unknown }>(`/rest/tasks/${t.taskId}`);
+          tasks.push({ ...((task?.data ?? task) as Record<string, unknown>), taskTargetId: t.id });
         } catch (e) {
-          tasks.push({ taskId: t.taskId, error: e.message });
+          tasks.push({ taskId: t.taskId, error: (e as Error).message });
         }
       }
       return text(`Tasks for person ${personId} (${tasks.length}):`, tasks);

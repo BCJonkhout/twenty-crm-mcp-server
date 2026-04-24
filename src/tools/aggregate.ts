@@ -1,7 +1,9 @@
-import { runReadonlySql, psqlDefaults } from "../psql.js";
-import { text } from "./_render.js";
+import { runReadonlySql, psqlDefaults } from "../psql.ts";
+import { text } from "./_render.ts";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { ToolHandler } from "../types.ts";
 
-const OBJECT_TO_TABLE = {
+const OBJECT_TO_TABLE: Record<string, string> = {
   people: "person",
   companies: "company",
   notes: "note",
@@ -15,28 +17,29 @@ const OBJECT_TO_TABLE = {
 
 // Translate a dotted composite path ("address.addressCity") to the flat
 // camelCase Postgres column name ("addressAddressCity").
-function toColumn(field) {
+function toColumn(field: string): string {
   const segs = field.split(".");
-  if (segs.length === 1) return segs[0];
-  return segs.reduce((acc, s, i) => i === 0 ? s : acc + s[0].toUpperCase() + s.slice(1));
+  if (segs.length === 1) return segs[0]!;
+  return segs.reduce((acc, s, i) => i === 0 ? s : acc + s[0]!.toUpperCase() + s.slice(1));
 }
 
-function tableFor(objectType) {
+function tableFor(objectType: string): string {
   const t = OBJECT_TO_TABLE[objectType] ?? objectType;
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t)) throw new Error(`Invalid object type: ${objectType}`);
   return t;
 }
 
-// User-supplied WHERE snippet is appended verbatim. The sql guard in psql.js
+const FORBIDDEN_IN_WHERE = /\b(insert|update|delete|drop|truncate|alter|create|grant|revoke|copy|call)\b/i;
+
+// User-supplied WHERE snippet is appended verbatim. The sql guard in psql.ts
 // still applies; additionally we cap it to simple safe characters here to avoid
 // accidental semicolons.
-function sanitizeWhere(where) {
+function sanitizeWhere(where: string | undefined): string {
   if (!where) return "";
   if (/;/.test(where)) throw new Error("where clause cannot contain ';'");
   if (FORBIDDEN_IN_WHERE.test(where)) throw new Error("where clause contains forbidden keyword");
   return where;
 }
-const FORBIDDEN_IN_WHERE = /\b(insert|update|delete|drop|truncate|alter|create|grant|revoke|copy|call)\b/i;
 
 const AGGREGATE_DESCRIPTION = `GROUP BY + count/sum/avg/min/max over a Twenty object. Executes as a read-only SQL query inside the twenty-db-1 postgres container.
 
@@ -72,7 +75,7 @@ Examples:
       objectType: "people"
       field: "prudaiMarketingSendgridCategory"`;
 
-export const definitions = [
+export const definitions: Tool[] = [
   {
     name: "aggregate_records",
     description: AGGREGATE_DESCRIPTION,
@@ -107,9 +110,29 @@ export const definitions = [
   },
 ];
 
-export function createHandlers() {
+interface AggregateArgs {
+  objectType: string;
+  groupBy: string;
+  aggregate?: string;
+  aggregateField?: string;
+  where?: string;
+  limit?: number;
+  include_deleted?: boolean;
+}
+
+interface DistinctArgs {
+  objectType: string;
+  field: string;
+  where?: string;
+  limit?: number;
+  include_deleted?: boolean;
+}
+
+export function createHandlers(_client?: unknown): Record<string, ToolHandler> {
+  void _client;
   return {
-    aggregate_records: async ({ objectType, groupBy, aggregate = "count", aggregateField, where, limit = 100, include_deleted = false }) => {
+    aggregate_records: async (args) => {
+      const { objectType, groupBy, aggregate = "count", aggregateField, where, limit = 100, include_deleted = false } = args as unknown as AggregateArgs;
       const table = tableFor(objectType);
       const groupCol = toColumn(groupBy);
       const agg = aggregate.toLowerCase();
@@ -117,7 +140,7 @@ export function createHandlers() {
       const whereSafe = sanitizeWhere(where);
       const whereClause = whereSafe ? `(${deletedGuard}) AND (${whereSafe})` : deletedGuard;
 
-      let aggExpr;
+      let aggExpr: string;
       if (agg === "count") {
         aggExpr = "COUNT(*)";
       } else {
@@ -135,7 +158,8 @@ export function createHandlers() {
         ...result,
       });
     },
-    distinct_values: async ({ objectType, field, where, limit = 100, include_deleted = false }) => {
+    distinct_values: async (args) => {
+      const { objectType, field, where, limit = 100, include_deleted = false } = args as unknown as DistinctArgs;
       const table = tableFor(objectType);
       const col = toColumn(field);
       const deletedGuard = include_deleted ? "1=1" : `"deletedAt" IS NULL`;

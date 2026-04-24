@@ -5,7 +5,8 @@
 **Transform your CRM into an AI-powered assistant**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-strict-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![Bun](https://img.shields.io/badge/runtime-bun-fbf0df?logo=bun)](https://bun.sh)
 [![Twenty CRM](https://img.shields.io/badge/Twenty_CRM-Compatible-blue)](https://twenty.com)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-purple)](https://modelcontextprotocol.io/)
 
@@ -54,7 +55,7 @@ All changes sync immediately with your Twenty CRM instance
 
 ### Prerequisites
 
-- Node.js 18 or higher
+- [Bun](https://bun.sh) 1.3 or higher (runs the TypeScript source directly — no build step)
 - A Twenty CRM instance (cloud or self-hosted)
 - Claude Desktop or compatible MCP client
 
@@ -68,7 +69,7 @@ cd twenty-crm-mcp-server
 
 2. **Install dependencies**:
 ```bash
-npm install
+bun install
 ```
 
 3. **Get your Twenty CRM API key**:
@@ -84,8 +85,8 @@ Add the server to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "twenty-crm": {
-      "command": "node",
-      "args": ["/path/to/twenty-crm-mcp-server/index.js"],
+      "command": "bun",
+      "args": ["run", "/path/to/twenty-crm-mcp-server/src/index.ts"],
       "env": {
         "TWENTY_API_KEY": "your_api_key_here",
         "TWENTY_BASE_URL": "https://api.twenty.com"
@@ -307,7 +308,7 @@ cd twenty-crm-mcp-server
 
 2. **Install dependencies**:
 ```bash
-npm install
+bun install
 ```
 
 3. **Set up environment variables**:
@@ -316,9 +317,11 @@ cp .env.example .env
 # Edit .env with your API key
 ```
 
-4. **Test the server**:
+4. **Type-check, test, smoke**:
 ```bash
-npm test
+bun run typecheck   # tsc --noEmit (strict)
+bun test            # unit + E2E
+bun run smoke       # end-to-end MCP stdio smoke
 ```
 
 ---

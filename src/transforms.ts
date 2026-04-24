@@ -1,10 +1,36 @@
 // Flat-input → Twenty composite-field transforms. Ported verbatim from the
 // original index.js so existing callers keep working.
 
-export function transformPersonData(data) {
-  const t = { ...data };
+import type { RestClient } from "./rest.ts";
+
+export interface PersonInput {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  linkedinUrl?: string;
+  [key: string]: unknown;
+}
+
+export interface CompanyInput {
+  name?: string;
+  domainName?: string | Record<string, unknown>;
+  address?: string | Record<string, unknown>;
+  linkedinUrl?: string;
+  xUrl?: string;
+  annualRecurringRevenue?: number | Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BodyInput {
+  body?: string;
+  [key: string]: unknown;
+}
+
+export function transformPersonData(data: PersonInput): Record<string, unknown> {
+  const t: Record<string, unknown> = { ...data };
   if (t.firstName || t.lastName) {
-    t.name = { firstName: t.firstName || "", lastName: t.lastName || "" };
+    t.name = { firstName: (t.firstName as string | undefined) || "", lastName: (t.lastName as string | undefined) || "" };
     delete t.firstName;
     delete t.lastName;
   }
@@ -23,8 +49,8 @@ export function transformPersonData(data) {
   return t;
 }
 
-export function transformCompanyData(data) {
-  const t = { ...data };
+export function transformCompanyData(data: CompanyInput): Record<string, unknown> {
+  const t: Record<string, unknown> = { ...data };
   if (typeof t.domainName === "string") {
     const domain = t.domainName;
     t.domainName = {
@@ -70,10 +96,10 @@ export function transformCompanyData(data) {
   return t;
 }
 
-export function transformBodyField(data) {
-  const t = { ...data };
+export function transformBodyField(data: BodyInput): Record<string, unknown> {
+  const t: Record<string, unknown> = { ...data };
   if (t.body === undefined) return t;
-  const text = t.body;
+  const text = t.body as string;
   const blocks = text.split("\n").map((line, i) => ({
     id: `block-${Date.now()}-${i}`,
     type: "paragraph",
@@ -89,10 +115,18 @@ export function transformBodyField(data) {
   return t;
 }
 
-export async function createTargetsForRecord(client, type, recordId, targetPersonIds = [], targetCompanyIds = []) {
+export type TargetType = "note" | "task";
+
+export async function createTargetsForRecord(
+  client: RestClient,
+  type: TargetType,
+  recordId: string,
+  targetPersonIds: string[] = [],
+  targetCompanyIds: string[] = [],
+): Promise<unknown[]> {
   const endpoint = type === "note" ? "/rest/noteTargets" : "/rest/taskTargets";
   const idField = type === "note" ? "noteId" : "taskId";
-  const created = [];
+  const created: unknown[] = [];
   for (const personId of targetPersonIds ?? []) {
     const target = await client.request(endpoint, {
       method: "POST",
@@ -110,17 +144,23 @@ export async function createTargetsForRecord(client, type, recordId, targetPerso
   return created;
 }
 
-export function extractId(result) {
+interface MaybeIdResult {
+  id?: string;
+  data?: Record<string, unknown> & { id?: string };
+}
+
+export function extractId(result: unknown): string | null {
   // Twenty responses nest the record under varying keys (data.createX, data.X).
   // Return the first plausible id.
   if (!result) return null;
-  if (result.id) return result.id;
-  const data = result.data;
+  const r = result as MaybeIdResult;
+  if (r.id) return r.id;
+  const data = r.data;
   if (!data) return null;
   if (data.id) return data.id;
   for (const key of Object.keys(data)) {
     const v = data[key];
-    if (v && typeof v === "object" && v.id) return v.id;
+    if (v && typeof v === "object" && (v as { id?: string }).id) return (v as { id: string }).id;
   }
   return null;
 }
