@@ -127,15 +127,19 @@ Then create a pull request with:
 
 ## Roadmap
 
+### Shipped
+
+- **Bulk Operations**: `batch_upsert_people`, `batch_upsert_companies`, `bulk_update_by_filter`, `bulk_attach_note`, `merge_people` (8-way parallel; duplicate-race recovery on POST 400)
+- **Advanced Filtering**: full Twenty filter grammar (`[eq] [neq] [in] [nin] [like] [ilike] [startsWith] [gt] [gte] [lt] [lte] [is]` + `and()`/`or()`/composite dot-paths/cursor pagination), plus `aggregate_records`, `distinct_values`, and a `run_sql_readonly` escape hatch
+- **Additional Object Types**: `query_records` / `count_records` work on any object (opportunities, messageThreads, messages, custom objects); `assign_owner` covers companies/opportunities/tasks; PrudAI `prudaiMarketing*` custom fields are first-class throughout
+- **Rate-limit handling** (partial perf): retry-with-`Retry-After`-and-exponential-backoff on 429/5xx; abort-on-timeout
+
 ### Planned Features
 
-- **Bulk Operations**: Import/export large datasets
-- **Advanced Filtering**: Complex query capabilities
 - **Webhook Support**: Real-time notifications
 - **Data Enrichment**: Integration with external data sources
 - **Workflow Triggers**: Automated actions based on events
-- **Performance Optimization**: Caching and rate limiting
-- **Additional Object Types**: Support for opportunities, custom objects
+- **Caching**: response caching for hot read paths (the rate-limit half of "performance optimization" is shipped above)
 
 ### Areas for Contribution
 
