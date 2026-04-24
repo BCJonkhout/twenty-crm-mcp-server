@@ -130,7 +130,20 @@ Example — retag all architects to a new playbook:
   objectType: "people"
   filter: jobTitle[like]:"%architect%"
   patch: { prudaiMarketingPlaybook: "Architect outbound Q2" }
-  dryRun: false`,
+  dryRun: false
+
+Example — assign every person at a given Company to its accountOwner (keeps RLS in sync after reassigning a Company):
+  objectType: "people"
+  filter: companyId[eq]:"<company-uuid>"
+  patch: { assigneeId: "<new-owner-workspaceMember-uuid>" }
+
+Example — bulk-assign a rep to every person at every Company they already own (does not touch already-assigned people):
+  1. list_companies with filter: accountOwnerId[eq]:"<rep-wm-uuid>", collect ids into <companyIds>
+  2. bulk_update_by_filter with
+       objectType: "people"
+       filter: and(companyId[in]:[<companyIds>],assigneeId[is]:NULL)
+       patch: { assigneeId: "<rep-wm-uuid>" }
+  Run with dryRun:true first to confirm the match count.`,
     inputSchema: {
       type: "object",
       properties: {

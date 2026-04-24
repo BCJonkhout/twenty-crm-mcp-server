@@ -89,7 +89,14 @@ Skip straight to SQL when:
 export const definitions = [
   {
     name: "create_person",
-    description: "Create a new person in Twenty CRM. firstName/lastName/email/phone/linkedinUrl are flat-input convenience wrappers that are transformed into Twenty's composite fields on send.",
+    description: `Create a new person in Twenty CRM. firstName/lastName/email/phone/linkedinUrl are flat-input convenience wrappers that are transformed into Twenty's composite fields on send.
+
+OWNERSHIP — row-level-permission invariant (important):
+  Twenty's "Sales Rep" role scopes Person visibility by \`assigneeId IS currentWorkspaceMember\`. To keep a new Person visible to the rep who owns the linked Company, set \`assigneeId\` to the Company's \`accountOwnerId\`:
+    1. If you pass \`companyId\`, fetch the Company with get_company and read its \`accountOwnerId\`.
+    2. If that accountOwnerId is set, pass it as \`assigneeId\` here.
+    3. If the Company has no accountOwner, leave \`assigneeId\` null.
+  Skipping this makes the Person invisible to the rep who owns the Company.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -102,6 +109,10 @@ export const definitions = [
         linkedinUrl: { type: "string" },
         city: { type: "string" },
         avatarUrl: { type: "string" },
+        assigneeId: {
+          type: "string",
+          description: "workspaceMember UUID who owns this Person. Inherit from the linked Company's accountOwnerId — see description."
+        },
       },
       required: ["firstName", "lastName"],
     },
@@ -113,7 +124,10 @@ export const definitions = [
   },
   {
     name: "update_person",
-    description: "Patch a person. Flat fields (firstName, email, phone, linkedinUrl) are re-wrapped into composite fields automatically.",
+    description: `Patch a person. Flat fields (firstName, email, phone, linkedinUrl) are re-wrapped into composite fields automatically.
+
+OWNERSHIP — row-level-permission invariant:
+  When you set or CHANGE \`companyId\`, also set \`assigneeId\` to the new Company's \`accountOwnerId\` (fetch via get_company) so the Person stays visible to the right rep under row-level permissions. Leave \`assigneeId\` null when the Company has no accountOwner. Use bulk_update_by_filter for reassigning many people at once.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -126,6 +140,10 @@ export const definitions = [
         companyId: { type: "string" },
         linkedinUrl: { type: "string" },
         city: { type: "string" },
+        assigneeId: {
+          type: "string",
+          description: "workspaceMember UUID who owns this Person. Inherit from the linked Company's accountOwnerId — see description."
+        },
       },
       required: ["id"],
     },

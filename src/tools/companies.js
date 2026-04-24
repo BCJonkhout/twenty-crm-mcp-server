@@ -38,7 +38,10 @@ Examples:
 export const definitions = [
   {
     name: "create_company",
-    description: "Create a company. domainName/address/linkedinUrl/xUrl/annualRecurringRevenue are flat-input wrappers transformed to composites.",
+    description: `Create a company. domainName/address/linkedinUrl/xUrl/annualRecurringRevenue are flat-input wrappers transformed to composites.
+
+OWNERSHIP:
+  Set \`accountOwnerId\` (workspaceMember UUID) to the rep who owns this account. Twenty's "Sales Rep" role scopes Company visibility by \`accountOwner IS currentWorkspaceMember\`, and People inherit visibility from their Company (propagate via \`update_person { assigneeId }\` or \`bulk_update_by_filter\`).`,
     inputSchema: {
       type: "object",
       properties: {
@@ -50,6 +53,10 @@ export const definitions = [
         xUrl: { type: "string" },
         annualRecurringRevenue: { type: "number" },
         idealCustomerProfile: { type: "boolean" },
+        accountOwnerId: {
+          type: "string",
+          description: "workspaceMember UUID of the rep who owns this company. Row-level permissions key off this field."
+        },
       },
       required: ["name"],
     },
@@ -61,7 +68,10 @@ export const definitions = [
   },
   {
     name: "update_company",
-    description: "Patch a company.",
+    description: `Patch a company.
+
+OWNERSHIP:
+  When you CHANGE \`accountOwnerId\`, the company's people do NOT auto-reassign — Twenty has no per-row trigger. Follow up with \`bulk_update_by_filter { objectType:"people", filter:"companyId[eq]:\\"<this-id>\\"", patch:{assigneeId:"<new-owner>"} }\` to keep People visibility in sync with Company ownership.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -72,6 +82,10 @@ export const definitions = [
         employees: { type: "number" },
         linkedinUrl: { type: "string" },
         annualRecurringRevenue: { type: "number" },
+        accountOwnerId: {
+          type: "string",
+          description: "workspaceMember UUID of the rep. Changing this does not cascade to linked People — use bulk_update_by_filter to propagate."
+        },
       },
       required: ["id"],
     },
