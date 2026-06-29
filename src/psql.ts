@@ -169,7 +169,20 @@ function runDocker(args: string[], timeoutMs = EXEC_TIMEOUT_MS): Promise<DockerR
 
     proc.stdout!.on("data", (c: Buffer) => stdoutChunks.push(c));
     proc.stderr!.on("data", (c: Buffer) => stderrChunks.push(c));
-    proc.on("error", (err) => { clearTimeout(timer); reject(err); });
+    proc.on("error", (err) => {
+      clearTimeout(timer);
+      // The most common failure is a missing `docker` CLI — e.g. when this MCP
+      // server runs inside a container (librechat-api) that has no docker binary.
+      // Node reports this as ENOENT; Bun as `Executable not found in $PATH`.
+      // Surface DOCKER_UNAVAILABLE so the caller can emit an accurate, actionable
+      // message instead of leaking a raw spawn error.
+      const e = err as NodeJS.ErrnoException;
+      if (e.code === "ENOENT" || /not found in \$PATH|ENOENT/i.test(e.message)) {
+        reject(new Error("DOCKER_UNAVAILABLE"));
+        return;
+      }
+      reject(err);
+    });
     proc.on("close", (code) => {
       clearTimeout(timer);
       const stdout = Buffer.concat(stdoutChunks).toString("utf8");
@@ -225,27 +238,96 @@ export interface ReadonlySqlOverrides {
   container?: string;
 }
 
+// Connection/config-level failures, classified by error code so genuine query
+// errors (undefined column 42703, undefined table 42P01, syntax 42601, query
+// canceled / statement timeout 57014, …) are NEVER misclassified.
+const CONNECTION_ERROR_CODES = new Set<string>([
+  // Node socket / DNS — host unreachable or unresolvable
+  "ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "EHOSTUNREACH", "EAI_AGAIN",
+  "ECONNRESET", "EPIPE",
+  // Postgres SQLSTATE — bad credentials / wrong database (TWENTY_DB_* config)
+  "28P01", // invalid_password
+  "28000", // invalid_authorization_specification
+  "3D000", // invalid_catalog_name (database does not exist)
+]);
+
+// pg's connection-timeout / termination paths reject with a plain Error that has
+// no `.code`; match those by exact phrase (not the bare word "timeout", which
+// also appears in the query-level "statement timeout").
+const CONNECTION_ERROR_PHRASES =
+  /timeout expired|connection terminated|could not connect|server closed the connection|connection refused/i;
+
+function isConnectionLevelError(err: unknown): boolean {
+  const e = err as { code?: unknown; syscall?: unknown } | null;
+  // DNS resolution ("getaddrinfo") and TCP connect failures are always
+  // connection-level, whatever the specific errno (ESERVFAIL, EAI_AGAIN, …).
+  if (e?.syscall === "getaddrinfo" || e?.syscall === "connect") return true;
+  if (typeof e?.code === "string" && CONNECTION_ERROR_CODES.has(e.code)) return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  return CONNECTION_ERROR_PHRASES.test(msg);
+}
+
 export async function runReadonlySql(userSql: string, overrides: ReadonlySqlOverrides = {}): Promise<SqlResult> {
   assertReadonly(userSql);
   const schema = overrides.schema ?? DEFAULT_SCHEMA;
 
   if (DEFAULT_DB_HOST) {
-    return runViaPg(userSql, {
-      host: overrides.host ?? DEFAULT_DB_HOST,
-      port: overrides.port ?? DEFAULT_DB_PORT,
-      user: overrides.dbUser ?? DEFAULT_DB_USER,
-      password: overrides.dbPassword ?? DEFAULT_DB_PASSWORD,
-      database: overrides.dbName ?? DEFAULT_DB_NAME,
-      schema,
-    });
+    const host = overrides.host ?? DEFAULT_DB_HOST;
+    const port = overrides.port ?? DEFAULT_DB_PORT;
+    try {
+      return await runViaPg(userSql, {
+        host,
+        port,
+        user: overrides.dbUser ?? DEFAULT_DB_USER,
+        password: overrides.dbPassword ?? DEFAULT_DB_PASSWORD,
+        database: overrides.dbName ?? DEFAULT_DB_NAME,
+        schema,
+      });
+    } catch (err) {
+      // Keep genuine query errors (syntax, unknown column, statement timeout)
+      // verbatim — they are actionable as-is and the agent can self-correct.
+      // Only re-frame connection/config-level failures, which would otherwise
+      // reach the agent as opaque "ECONNREFUSED"/"ENOTFOUND" strings.
+      //
+      // Classify by error CODE, not message substring: a bare /connect|timeout/
+      // match would wrongly swallow real query errors (e.g. the column
+      // "connectedAccountId" or a "statement timeout" the agent should fix).
+      if (isConnectionLevelError(err)) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `Cannot connect to the Twenty Postgres database at ${host}:${port} ` +
+          `(check TWENTY_DB_* config / network reachability). Underlying error: ${msg}`,
+        );
+      }
+      throw err;
+    }
   }
 
-  return runViaDocker(userSql, {
-    container: overrides.container ?? DEFAULT_CONTAINER,
-    dbUser: overrides.dbUser ?? DEFAULT_DB_USER,
-    dbName: overrides.dbName ?? DEFAULT_DB_NAME,
-    schema,
-  });
+  // No TWENTY_DB_HOST configured → host-side docker-exec fallback. This only
+  // works when the docker CLI is present and the twenty-db container is local
+  // (the path Claude Code uses on the host). It does NOT work inside a container.
+  try {
+    return await runViaDocker(userSql, {
+      container: overrides.container ?? DEFAULT_CONTAINER,
+      dbUser: overrides.dbUser ?? DEFAULT_DB_USER,
+      dbName: overrides.dbName ?? DEFAULT_DB_NAME,
+      schema,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === "DOCKER_UNAVAILABLE") {
+      throw new Error(
+        "run_sql_readonly is not configured in this environment. No TWENTY_DB_HOST is " +
+        "set, so the tool fell back to a `docker exec` against the Twenty DB container, " +
+        "but the docker CLI is unavailable here (e.g. inside the librechat-api container). " +
+        "Fix: set TWENTY_DB_HOST/TWENTY_DB_PORT/TWENTY_DB_USER/TWENTY_DB_PASSWORD/" +
+        "TWENTY_DB_NAME so the tool connects to Postgres directly over TCP. " +
+        "(Meanwhile, use the REST-backed tools — search_records, list_companies, " +
+        "list_people, count_records — which do not require a DB connection.)",
+      );
+    }
+    throw err;
+  }
 }
 
 export const psqlDefaults = {
