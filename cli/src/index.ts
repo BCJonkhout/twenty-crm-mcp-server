@@ -21,8 +21,12 @@ import { render } from "./output.ts";
 import { fetchRecords, planList, runGet, runList, type ObjectPath } from "./commands/records.ts";
 import { buildSegment, renderSegment } from "./commands/segments.ts";
 import { parseCsv, planImport, renderImportPlan } from "./commands/importCsv.ts";
+import {
+  executeWrites, planWrites, renderWritePlan, type ImportRow,
+} from "./commands/importWrite.ts";
 import * as auth from "./commands/auth.ts";
 import * as marketing from "./commands/marketing.ts";
+import { DEFAULT_BASE_URL, indexUrl, marketingUrl, recordUrl } from "./urls.ts";
 import { createGraphQLTransport, currentWorkspace } from "./auth-api.ts";
 
 class CliError extends Error {}
@@ -93,7 +97,11 @@ async function main(argv: string[]): Promise<number> {
 
   const json = flagBool(parsed.flags, "json") === true;
   const csv = flagBool(parsed.flags, "csv") === true;
-  const ctx = { json, csv };
+  const ctx = {
+    json,
+    csv,
+    baseUrl: flagString(parsed.flags, "base-url") ?? process.env.CATO_BASE_URL ?? DEFAULT_BASE_URL,
+  };
 
   switch (group) {
     case "people":
@@ -185,12 +193,98 @@ async function runImport(
 
   const text = await Bun.file(file).text();
   const table = parseCsv(text);
+
+  // The provenance-tagging path: `--source-system` says "this list came from
+  // somewhere, record where". Only companies, and only provenance fields.
+  const sourceSystem = flagString(flags, "source-system");
+  if (sourceSystem) {
+    if (objectFlag !== "companies") {
+      throw new CliError("--source-system is only supported with --object companies.");
+    }
+    return runImportTag(table, file, sourceSystem, flags, ctx);
+  }
+
   const plan = planImport(table, {
     object: objectFlag,
     file,
     matchOn: flagString(flags, "match-on"),
   });
   out(renderImportPlan(plan, ctx.json));
+  return 0;
+}
+
+/** Reads the CSV into ImportRows, matches against CATO, then plans or applies. */
+async function runImportTag(
+  table: ReturnType<typeof parseCsv>,
+  file: string,
+  sourceSystem: string,
+  flags: Record<string, FlagValue>,
+  ctx: { json: boolean; csv: boolean; baseUrl?: string },
+): Promise<number> {
+  const col = (header: string): number =>
+    table.headers.findIndex((h) => h.trim().toLowerCase() === header);
+  const nameIdx = col("name");
+  if (nameIdx === -1) throw new CliError(`${file} has no 'name' column.`);
+
+  const segmentIdx = col("segment");
+  const urlIdx = col("url");
+  const contextIdx = col("context");
+
+  const rows: ImportRow[] = table.rows
+    .map((row) => {
+      const rawContext = contextIdx === -1 ? "" : (row[contextIdx] ?? "");
+      let context: Record<string, unknown> | undefined;
+      if (rawContext) {
+        try { context = JSON.parse(rawContext) as Record<string, unknown>; }
+        catch { context = { note: rawContext }; }
+      }
+      return {
+        name: (row[nameIdx] ?? "").trim(),
+        sourceSegment: segmentIdx === -1 ? undefined : (row[segmentIdx] ?? "").trim() || undefined,
+        sourceUrl: urlIdx === -1 ? undefined : (row[urlIdx] ?? "").trim() || undefined,
+        sourceSystem,
+        context,
+      };
+    })
+    .filter((r) => r.name !== "");
+
+  const creds = await resolveAuth(flags);
+  const client = restClient(creds);
+  const baseUrl = ctx.baseUrl ?? DEFAULT_BASE_URL;
+
+  // One pass over CATO's companies beats 200+ individual lookups.
+  const existingRecords = await fetchRecords(client, {
+    objectPath: "companies", filter: null, limit: 100000, fetchAll: true,
+  });
+  const existing = existingRecords
+    .map((r) => ({ id: String(r.id ?? ""), name: String(r.name ?? "") }))
+    .filter((r) => r.id && r.name);
+
+  const plan = planWrites(rows, existing);
+  const gate = resolveWriteGate(flags);
+  if (gate.blockedReason) throw new CliError(gate.blockedReason);
+
+  if (gate.dryRun) {
+    out(renderWritePlan(plan, sourceSystem, ctx.json));
+    out(`\nMatched against ${existing.length} companies already in CATO.`);
+    out(`List afterwards: ${indexUrl(baseUrl, "companies")}`);
+    return 0;
+  }
+
+  const outcomes = await executeWrites(client, plan, baseUrl);
+  const created = outcomes.filter((o) => o.action === "create").length;
+  const tagged = outcomes.filter((o) => o.action === "tag").length;
+  const failed = outcomes.filter((o) => o.action === "skip").length;
+
+  if (ctx.json || ctx.csv) {
+    out(render(outcomes as unknown as Record<string, unknown>[], { json: ctx.json, csv: ctx.csv }));
+  } else {
+    out(`Created ${created}, tagged ${tagged}, skipped ${failed}.`);
+    for (const o of outcomes.filter((x) => x.url).slice(0, 10)) out(`  ${o.name}  ${o.url}`);
+    if (outcomes.filter((x) => x.url).length > 10) out("  …");
+  }
+  out(`\nOpen the tagged list: ${indexUrl(baseUrl, "companies")}`);
+  out(`Filter on prudaiMarketingSourceSystem = '${sourceSystem}'.`);
   return 0;
 }
 

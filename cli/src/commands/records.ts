@@ -6,6 +6,7 @@ import {
 } from "../filters.ts";
 import { flagBool, flagList, flagNumber, flagString, type FlagValue } from "../args.ts";
 import { render, renderOne } from "../output.ts";
+import { DEFAULT_BASE_URL, withUrls } from "../urls.ts";
 
 export const DEFAULT_LIMIT = 20;
 /** Twenty caps a REST page at 200 (v1.19). Paging above that is our job, not the server's. */
@@ -150,6 +151,8 @@ export async function fetchRecords(client: RestClient, plan: ListInvocation): Pr
 export interface RenderContext {
   json: boolean;
   csv: boolean;
+  /** Base URL of the CATO web app; used to make every record clickable. */
+  baseUrl?: string;
 }
 
 export async function runList(
@@ -160,8 +163,11 @@ export async function runList(
 ): Promise<string> {
   const plan = planList(objectPath, flags);
   const rows = await fetchRecords(client, plan);
-  const columns = flagList(flags, "fields") ?? [...DEFAULT_COLUMNS[objectPath]];
-  return render(rows, { json: ctx.json, csv: ctx.csv, columns: ctx.json ? undefined : columns });
+  const linked = withUrls(rows as Record<string, unknown>[], ctx.baseUrl ?? DEFAULT_BASE_URL, objectPath);
+  const columns = flagList(flags, "fields") ?? [...DEFAULT_COLUMNS[objectPath], "url"];
+  return render(linked as TwentyRecord[], {
+    json: ctx.json, csv: ctx.csv, columns: ctx.json ? undefined : columns,
+  });
 }
 
 export async function runGet(
@@ -178,8 +184,11 @@ export async function runGet(
   );
   const singular = SINGULAR[objectPath];
   const row = result?.data?.[singular] ?? null;
+  const linked = row
+    ? withUrls([row as Record<string, unknown>], ctx.baseUrl ?? DEFAULT_BASE_URL, objectPath)[0]
+    : null;
   const columns = flagList(flags, "fields");
-  return renderOne(row, { json: ctx.json, csv: ctx.csv, columns });
+  return renderOne(linked as TwentyRecord | null, { json: ctx.json, csv: ctx.csv, columns });
 }
 
 const SINGULAR: Record<ObjectPath, string> = {

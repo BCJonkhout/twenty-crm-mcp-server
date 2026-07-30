@@ -89,6 +89,7 @@ const IMPORT_FLAGS: FlagSpecs = {
   csv: { type: "string", placeholder: "<path>", description: "CSV file to analyse." },
   object: { type: "string", placeholder: "<people|companies>", description: "Target object (default: people)." },
   "match-on": { type: "string", placeholder: "<field>", description: "Field used to detect existing records (default: emails.primaryEmail)." },
+  "source-system": { type: "string", placeholder: "<name>", description: "Tag companies with this provenance label. Enables the write path (companies only)." },
 };
 
 const AUTH_FLAGS: FlagSpecs = {
