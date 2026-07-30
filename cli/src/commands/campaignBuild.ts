@@ -163,9 +163,10 @@ export async function sendTest(
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     throw new CampaignInputError(`'${email}' is not a valid email address.`);
   }
+  // The server DTO calls this field testRecipient, not email.
   return client.request(`${MARKETING_BASE}/campaigns/${campaignId}/send-test`, {
     method: "POST",
-    body: { email },
+    body: { testRecipient: email },
   });
 }
 

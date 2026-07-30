@@ -113,7 +113,8 @@ describe("write calls", () => {
     const { client, calls } = mockClient();
     await sendTest(client, "camp-1", "beau@prudai.com");
     expect(calls[0]!.endpoint).toEndWith("/send-test");
-    expect(calls[0]!.body).toEqual({ email: "beau@prudai.com" });
+    // Verified against the live API: the server rejects {email} with 400.
+    expect(calls[0]!.body).toEqual({ testRecipient: "beau@prudai.com" });
   });
 });
 
