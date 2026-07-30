@@ -12,7 +12,10 @@ export const COMMAND_TREE: Record<string, readonly string[]> = {
   segments: ["build"],
   import: [],
   auth: ["create", "set", "list", "revoke", "status", "whoami", "roles"],
-  marketing: ["campaigns", "touchpoints", "dispatches", "events", "schedule", "approve", "reject", "send-now"],
+  marketing: [
+    "campaigns", "touchpoints", "dispatches", "events", "schedule", "approve", "reject", "send-now",
+    "create", "targets", "contacts", "generation", "enable", "send-test",
+  ],
 };
 
 const COMMON_READ_FLAGS: FlagSpecs = {
@@ -108,6 +111,19 @@ const MARKETING_FLAGS: FlagSpecs = {
   campaign: { type: "string", placeholder: "<uuid>", description: "Campaign id." },
   state: { type: "string", placeholder: "<pending|approved|rejected>", description: "Filter the review queue by approval state." },
   touchpoint: { type: "string", placeholder: "<uuid>", description: "Touchpoint id (approve/reject)." },
+  name: { type: "string", placeholder: "<text>", description: "Campaign name (create)." },
+  subject: { type: "string", placeholder: "<text>", description: "Mail subject (create)." },
+  message: { type: "string", placeholder: "<text>", description: "Core message the generator works from (create)." },
+  "focus-area": { type: "string", placeholder: "<text>", description: "Focus area, e.g. a segment or theme (create)." },
+  "cta-text": { type: "string", placeholder: "<text>", description: "Call-to-action label (create)." },
+  "cta-link": { type: "string", placeholder: "<url>", description: "Call-to-action URL, must be absolute (create)." },
+  channel: { type: "string", placeholder: "<outbound|newsletter>", description: "Campaign channel (default: outbound)." },
+  "source-system": { type: "string", placeholder: "<name>", description: "Audience filter on provenance, as written by `cato import`." },
+  segment: { type: "string", placeholder: "<text>", description: "Audience filter on prudaiMarketingSourceSegment." },
+  branche: { type: "string", placeholder: "<text>", description: "Audience filter on branche." },
+  on: { type: "boolean", description: "Turn generation/enabled on (default for `generation`/`enable`)." },
+  off: { type: "boolean", description: "Turn generation/enabled off." },
+  email: { type: "string", placeholder: "<address>", description: "Recipient of a single test mail (send-test)." },
 };
 
 export function flagSpecsFor(command: readonly string[]): FlagSpecs {
@@ -144,7 +160,13 @@ export const COMMAND_SUMMARIES: Record<string, string> = {
   "opportunities list": "List opportunities (pipeline).",
   "notes list": "List notes.",
   "segments build": "Build a target-audience selection from filters and write it out as JSON/CSV.",
-  import: "DRY-RUN ONLY: analyse a CSV and report what an import would do. Writes nothing.",
+  import: "Analyse a CSV; with --source-system also tag/create companies. Needs --no-dry-run --yes.",
+  "marketing create": "Create a campaign. Starts disabled, generation off, no members. Sends nothing.",
+  "marketing targets": "Attach companies as campaign targets from a provenance filter.",
+  "marketing contacts": "Attach matching people as campaign members.",
+  "marketing generation": "Turn AI draft generation on (default) or off (--off). Drafts still need approval.",
+  "marketing enable": "Enable (default) or disable (--off) a campaign.",
+  "marketing send-test": "Send ONE test mail to --email. The audience is never touched.",
   "auth create": "Create an API key in CATO and print the token once. Needs --no-dry-run --yes.",
   "auth set": "Store a key/token in a local profile (~/.config/cato/credentials.json, 0600).",
   "auth list": "List API keys in the workspace (never the key material).",

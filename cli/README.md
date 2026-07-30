@@ -64,8 +64,34 @@ cato marketing events                 # opens, clicks, bounces, unsubscribes
 cato marketing schedule               # de weekly windows
 ```
 
-Schrijfacties (`approve`, `reject`, `send-now`) bestaan, maar vereisen `--no-dry-run --yes` en tonen
-eerst hoeveel ontvangers je raakt.
+### Een campagne opzetten
+
+De volledige keten, in werkvolgorde. Elke stap is dry-run tenzij je `--no-dry-run --yes` toevoegt:
+
+```sh
+cato marketing create --name "Wave 1 — pilots" --subject "..." --cta-link https://leo.prudai.com
+cato marketing targets    --campaign <id> --source-system concurrentie_analyse_legal_ai_2026_07
+cato marketing contacts   --campaign <id> --source-system concurrentie_analyse_legal_ai_2026_07
+cato marketing generation --campaign <id>            # AI-concepten aanzetten
+cato marketing send-test  --campaign <id> --email jij@prudai.com
+cato marketing touchpoints --campaign <id> --state pending   # de review-queue
+cato marketing approve    --touchpoint <id> --no-dry-run --yes
+cato marketing enable     --campaign <id>            # pas hierna pakt de planner hem op
+```
+
+`create` valideert zonder credentials, zodat een agent een campagne kan plannen vóór hij een token
+heeft. Een nieuwe campagne start **uitgeschakeld, zonder generatie en zonder leden** — aanmaken
+verstuurt niets. `targets` en `contacts` weigeren een lege filter: je kunt niet per ongeluk iedereen
+selecteren.
+
+Schrijfacties (`approve`, `reject`, `send-now`) vereisen `--no-dry-run --yes` en tonen eerst hoeveel
+ontvangers je raakt.
+
+> **De marketing-module accepteert geen API-key.** `marketing-access.service.ts` geeft elke
+> auth-context die geen *user* is `accessLevel: 'none'`. Voor alles onder `cato marketing` heb je een
+> **user-sessietoken** nodig (`cato auth set --user-token <token>` of `$CATO_USER_TOKEN`), af te lezen
+> uit een ingelogde CATO-browsersessie. Een agent met alleen een API-key kan CRM-data lezen en
+> schrijven, maar géén campagne starten.
 
 ## Wat dit bewust NIET doet
 
@@ -74,7 +100,7 @@ eerst hoeveel ontvangers je raakt.
   goedkeuring een bewuste rem.
 - **Geen mail versturen buiten CATO om.** Verzending loopt via de SendGrid-integratie van de
   server, niet via de CLI.
-- **Geen schrijfpad in `import`.** Alleen tonen wat er zou gebeuren.
+- **Geen schrijfpad in `import`** zonder `--source-system`; mét die vlag alleen herkomstvelden.
 - **Geen secrets in de repo.** De CLI leest bij voorkeur uit OpenBao (`kv/prod/prudai-twenty/app`).
 
 ## Bekende afwijking

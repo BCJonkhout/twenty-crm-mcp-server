@@ -26,6 +26,7 @@ import {
 } from "./commands/importWrite.ts";
 import * as auth from "./commands/auth.ts";
 import * as marketing from "./commands/marketing.ts";
+import * as build from "./commands/campaignBuild.ts";
 import { DEFAULT_BASE_URL, indexUrl, marketingUrl, recordUrl } from "./urls.ts";
 import { createGraphQLTransport, currentWorkspace } from "./auth-api.ts";
 
@@ -402,11 +403,19 @@ async function runMarketing(
   sub: string,
   positionals: string[],
   flags: Record<string, FlagValue>,
-  ctx: { json: boolean; csv: boolean },
+  ctx: { json: boolean; csv: boolean; baseUrl?: string },
 ): Promise<number> {
-  const creds = await resolveAuth(flags);
-  const userToken = marketing.assertMarketingAuth(creds.userToken);
-  const client = restClient(creds, userToken);
+  // Auth is resolved lazily: a dry run that only validates input should work
+  // without credentials, so an agent can plan a campaign before it has a token.
+  let cached: RestClient | null = null;
+  const clientFor = async (): Promise<RestClient> => {
+    if (cached) return cached;
+    const creds = await resolveAuth(flags);
+    const userToken = marketing.assertMarketingAuth(creds.userToken);
+    cached = restClient(creds, userToken);
+    return cached;
+  };
+  const client = sub === "create" ? (null as unknown as RestClient) : await clientFor();
 
   const campaignId = flagString(flags, "campaign") ?? positionals[0];
 
@@ -423,7 +432,11 @@ async function runMarketing(
     return 0;
   }
 
-  if (!campaignId) throw new CliError(`cato marketing ${sub} needs --campaign <id>.`);
+  // `create` is the one subcommand that brings a campaign into existence, so it
+  // is the one subcommand that cannot be asked for a campaign id.
+  if (sub !== "create" && !campaignId) {
+    throw new CliError(`cato marketing ${sub} needs --campaign <id>.`);
+  }
 
   if (sub === "touchpoints") {
     const state = marketing.normalizeApprovalState(flagString(flags, "state"));
@@ -483,6 +496,91 @@ async function runMarketing(
     out(`About to send ${approved.length} approved touchpoint(s) for '${campaign.name}' NOW.`);
     const result = await marketing.sendApprovedNow(client, campaignId);
     out(`Sent ${result.sentCount}, errors ${result.errorCount}.`);
+    return 0;
+  }
+
+  if (sub === "create") {
+    const planned = build.planCreateCampaign({
+      name: flagString(flags, "name") ?? positionals[0],
+      mailSubject: flagString(flags, "subject"),
+      message: flagString(flags, "message"),
+      focusArea: flagString(flags, "focus-area"),
+      ctaText: flagString(flags, "cta-text"),
+      ctaLink: flagString(flags, "cta-link"),
+      channel: flagString(flags, "channel") as "outbound" | "newsletter" | undefined,
+      description: flagString(flags, "description"),
+    });
+    const gate = resolveWriteGate(flags);
+    if (gate.blockedReason) throw new CliError(gate.blockedReason);
+    if (gate.dryRun) {
+      out(build.renderCreateDryRun(planned));
+      return 0;
+    }
+    const created = await build.createCampaign(await clientFor(), planned);
+    out(ctx.json ? JSON.stringify(created, null, 2) : `Created campaign '${created.name}' (${created.id}).`);
+    out(`Open it: ${marketingUrl(ctx.baseUrl ?? DEFAULT_BASE_URL, created.id)}`);
+    out("It is disabled, generation is off and it has no members yet.");
+    return 0;
+  }
+
+  if (sub === "targets" || sub === "contacts") {
+    if (!campaignId) throw new CliError(`cato marketing ${sub} needs --campaign <id>.`);
+    const filter = build.buildAudienceFilter({
+      sourceSystem: flagString(flags, "source-system"),
+      segment: flagString(flags, "segment"),
+      branche: flagString(flags, "branche"),
+    });
+    const gate = resolveWriteGate(flags);
+    if (gate.blockedReason) throw new CliError(gate.blockedReason);
+    if (gate.dryRun) {
+      out(build.renderAudienceDryRun(filter, campaignId, sub === "targets" ? "company-targets" : "members"));
+      return 0;
+    }
+    const authed = await clientFor();
+    const result = sub === "targets"
+      ? await build.addMatchingCompanyTargets(authed, campaignId, filter)
+      : await build.attachMatchingMembers(authed, campaignId, filter);
+    out(JSON.stringify(result, null, 2));
+    out(`\nCampaign: ${marketingUrl(ctx.baseUrl ?? DEFAULT_BASE_URL, campaignId)}`);
+    return 0;
+  }
+
+  if (sub === "generation" || sub === "enable") {
+    if (!campaignId) throw new CliError(`cato marketing ${sub} needs --campaign <id>.`);
+    const off = flagBool(flags, "off") === true;
+    const on = !off;
+    const gate = resolveWriteGate(flags);
+    if (gate.blockedReason) throw new CliError(gate.blockedReason);
+    if (gate.dryRun) {
+      out(`DRY RUN — would turn ${sub} ${on ? "ON" : "OFF"} for campaign ${campaignId}.`);
+      if (sub === "generation" && on) {
+        out("Generation writes drafts; it does not send. Each draft still needs approval.");
+      }
+      out("Re-run with --no-dry-run --yes to apply.");
+      return 0;
+    }
+    const authed = await clientFor();
+    if (sub === "generation") await build.setGeneration(authed, campaignId, on);
+    else await build.setEnabled(authed, campaignId, on);
+    out(`${sub} is now ${on ? "ON" : "OFF"} for campaign ${campaignId}.`);
+    out(`Campaign: ${marketingUrl(ctx.baseUrl ?? DEFAULT_BASE_URL, campaignId)}`);
+    return 0;
+  }
+
+  if (sub === "send-test") {
+    if (!campaignId) throw new CliError("cato marketing send-test needs --campaign <id>.");
+    const email = flagString(flags, "email");
+    if (!email) throw new CliError("cato marketing send-test needs --email <address>.");
+    const gate = resolveWriteGate(flags);
+    if (gate.blockedReason) throw new CliError(gate.blockedReason);
+    if (gate.dryRun) {
+      out(`DRY RUN — would send ONE test mail for campaign ${campaignId} to ${email}.`);
+      out("The audience is not touched by this command.");
+      out("Re-run with --no-dry-run --yes to send it.");
+      return 0;
+    }
+    await build.sendTest(await clientFor(), campaignId, email);
+    out(`Test mail for campaign ${campaignId} sent to ${email}.`);
     return 0;
   }
 
