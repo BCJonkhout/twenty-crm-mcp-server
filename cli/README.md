@@ -123,6 +123,25 @@ niet opnieuw geprobeerd heeft. Alleen `GET`, `PUT`, `DELETE`, `HEAD` en `OPTIONS
 fouten herhaald. Een endpoint dat als POST is vormgegeven maar echt herhaalbaar is, kan zich
 aanmelden met `idempotent: true`.
 
+## Nog te doen
+
+**Documentatie op `crm.prudai.com/docs` (feature voor later).** Er is nu geen enkele in-app
+documentatie: nginx proxyt alles ongefilterd naar de app, er is geen `/docs`-route in
+`twenty-shared/AppPath.ts` en geen docs-pagina in de front-end. De vijf markdown-bestanden in
+`prudai-twenty/docs/` worden nergens geserveerd.
+
+Waarom dit de moeite waard is: de marketing-module is eigen bouw en kent inmiddels
+~47 endpoints, 13 tabellen, een goedkeurings-workflow en een verzendvenster. Wie daar nieuw
+instapt — Geert, Roland, een coding agent van Bas — heeft nu geen andere bron dan de broncode of
+deze README. Een `/docs`-route in de app zelf brengt die uitleg naar de plek waar het werk gebeurt.
+
+Denkbare inhoud: de campagne-levenscyclus (concept → goedgekeurd → verstuurd), wie wat mag per rol,
+wat het verzendvenster doet, hoe herkomst-tags (`prudaiMarketingSource*`) doorwerken in doelgroepen,
+en de CLI-commando's uit deze README.
+
+Aandachtspunt bij het bouwen: zet het achter dezelfde auth als de rest van de app. Een deel van deze
+documentatie beschrijft wie er mag verzenden — dat hoort niet publiek te staan.
+
 ## Bekende afwijking
 
 `TWENTY_API_KEY` staat op dit moment in platte tekst in `/root/librechat/.env` en in
