@@ -1,5 +1,5 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { RestClient } from "./rest.ts";
+import type { RestClient } from "@twenty-crm/core";
 
 export type ToolResult = CallToolResult;
 export type ToolArgs = Record<string, unknown>;

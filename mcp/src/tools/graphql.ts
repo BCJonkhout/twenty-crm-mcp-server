@@ -1,5 +1,4 @@
-import { graphqlRequest } from "../graphql.ts";
-import type { RestClient } from "../rest.ts";
+import { graphqlRequest, type RestClient } from "@twenty-crm/core";
 import { text } from "./_render.ts";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolHandler } from "../types.ts";

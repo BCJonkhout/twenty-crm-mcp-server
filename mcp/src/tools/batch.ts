@@ -1,6 +1,4 @@
-import { buildListQuery, iterRecords, type RestClient } from "../rest.ts";
-import { transformPersonData, transformCompanyData, type PersonInput, type CompanyInput } from "../transforms.ts";
-import { combineWithSoftDelete } from "../filter.ts";
+import { buildListQuery, iterRecords, type RestClient, transformPersonData, transformCompanyData, type PersonInput, type CompanyInput, combineWithSoftDelete } from "@twenty-crm/core";
 import { text } from "./_render.ts";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolHandler } from "../types.ts";

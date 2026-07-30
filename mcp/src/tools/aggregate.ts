@@ -1,4 +1,4 @@
-import { runReadonlySql, psqlDefaults } from "../psql.ts";
+import { runReadonlySql, psqlDefaults } from "@twenty-crm/core";
 import { text } from "./_render.ts";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolHandler } from "../types.ts";

@@ -1,0 +1,4301 @@
+# GENERATED FILE — do not edit by hand.
+# Source : GET https://crm.prudai.com/rest/open-api/core (live CATO instance)
+# Script : bun run cli/scripts/generate-openapi.ts
+# Regenerate after any CRM schema change; do not patch this file directly.
+openapi: 3.1.1
+info:
+  title: "CATO — PrudAI CRM (read-only)"
+  version: v0.1
+  description: |-
+    Read-only view of PrudAI's Twenty CRM instance ("CATO").
+
+    This document is GENERATED from the live CATO OpenAPI document
+    (GET /rest/open-api/core) by cli/scripts/generate-openapi.ts. Field names,
+    enum values and composite shapes are therefore the real ones, not a copy that
+    drifts.
+
+    WHAT IS IN HERE
+      people, companies, opportunities, notes — list + get, GET only.
+
+    WHAT IS DELIBERATELY LEFT OUT
+      * every write verb (POST/PATCH/PUT/DELETE) on every object;
+      * the /batch/*, /merge, /duplicates and /groupBy routes;
+      * every other object in the workspace, including messages,
+        messageParticipants, connectedAccounts, calendarEvents and the 13 custom
+        marketing* tables — those carry e-mail content, mailbox metadata and
+        campaign state that an external reader has no reason to see;
+      * the metadata API (/rest/metadata/*) and the GraphQL endpoints;
+      * the custom /rest/marketing/* controller (~47 routes).
+
+    AUTHENTICATION
+      Bearer token in the Authorization header. The token is a Twenty API key.
+
+      IMPORTANT — read this before issuing a key. In this Twenty build every API
+      key must carry a role, and a role is only attachable to an API key when
+      canBeAssignedToApiKeys is true. Today the ONLY such role in this workspace is
+      Admin, which grants read, write, delete and all settings. This document
+      describes a read-only surface, but the credential handed to a caller is not
+      itself read-only until a dedicated read-only role is created and used.
+      Verify with: cato auth roles
+servers:
+  - url: "https://crm.prudai.com/rest/"
+    description: "CATO production (read-only surface)"
+security:
+  - bearerAuth: []
+paths:
+  "/people":
+    get:
+      tags:
+        - people
+      summary: Find Many people
+      description: "**order_by**, **filter**, **limit**, **depth**, **starting_after** or **ending_before** can be provided to request your **people**"
+      operationId: findManyPeople
+      parameters:
+        - "$ref": "#/components/parameters/orderBy"
+        - "$ref": "#/components/parameters/filter"
+        - "$ref": "#/components/parameters/limit"
+        - "$ref": "#/components/parameters/depth"
+        - "$ref": "#/components/parameters/startingAfter"
+        - "$ref": "#/components/parameters/endingBefore"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      people:
+                        type: array
+                        items:
+                          "$ref": "#/components/schemas/PersonForResponse"
+                  pageInfo:
+                    type: object
+                    properties:
+                      hasNextPage:
+                        type: boolean
+                      startCursor:
+                        type: string
+                        format: uuid
+                      endCursor:
+                        type: string
+                        format: uuid
+                  totalCount:
+                    type: integer
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+  "/people/{id}":
+    get:
+      tags:
+        - people
+      summary: Find One person
+      description: "**depth** can be provided to request your **person**"
+      operationId: findOnePerson
+      parameters:
+        - "$ref": "#/components/parameters/idPath"
+        - "$ref": "#/components/parameters/depth"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      person:
+                        "$ref": "#/components/schemas/PersonForResponse"
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+  "/companies":
+    get:
+      tags:
+        - companies
+      summary: Find Many companies
+      description: "**order_by**, **filter**, **limit**, **depth**, **starting_after** or **ending_before** can be provided to request your **companies**"
+      operationId: findManyCompanies
+      parameters:
+        - "$ref": "#/components/parameters/orderBy"
+        - "$ref": "#/components/parameters/filter"
+        - "$ref": "#/components/parameters/limit"
+        - "$ref": "#/components/parameters/depth"
+        - "$ref": "#/components/parameters/startingAfter"
+        - "$ref": "#/components/parameters/endingBefore"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      companies:
+                        type: array
+                        items:
+                          "$ref": "#/components/schemas/CompanyForResponse"
+                  pageInfo:
+                    type: object
+                    properties:
+                      hasNextPage:
+                        type: boolean
+                      startCursor:
+                        type: string
+                        format: uuid
+                      endCursor:
+                        type: string
+                        format: uuid
+                  totalCount:
+                    type: integer
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+  "/companies/{id}":
+    get:
+      tags:
+        - companies
+      summary: Find One company
+      description: "**depth** can be provided to request your **company**"
+      operationId: findOneCompany
+      parameters:
+        - "$ref": "#/components/parameters/idPath"
+        - "$ref": "#/components/parameters/depth"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      company:
+                        "$ref": "#/components/schemas/CompanyForResponse"
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+  "/opportunities":
+    get:
+      tags:
+        - opportunities
+      summary: Find Many opportunities
+      description: "**order_by**, **filter**, **limit**, **depth**, **starting_after** or **ending_before** can be provided to request your **opportunities**"
+      operationId: findManyOpportunities
+      parameters:
+        - "$ref": "#/components/parameters/orderBy"
+        - "$ref": "#/components/parameters/filter"
+        - "$ref": "#/components/parameters/limit"
+        - "$ref": "#/components/parameters/depth"
+        - "$ref": "#/components/parameters/startingAfter"
+        - "$ref": "#/components/parameters/endingBefore"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      opportunities:
+                        type: array
+                        items:
+                          "$ref": "#/components/schemas/OpportunityForResponse"
+                  pageInfo:
+                    type: object
+                    properties:
+                      hasNextPage:
+                        type: boolean
+                      startCursor:
+                        type: string
+                        format: uuid
+                      endCursor:
+                        type: string
+                        format: uuid
+                  totalCount:
+                    type: integer
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+  "/opportunities/{id}":
+    get:
+      tags:
+        - opportunities
+      summary: Find One opportunity
+      description: "**depth** can be provided to request your **opportunity**"
+      operationId: findOneOpportunity
+      parameters:
+        - "$ref": "#/components/parameters/idPath"
+        - "$ref": "#/components/parameters/depth"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      opportunity:
+                        "$ref": "#/components/schemas/OpportunityForResponse"
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+  "/notes":
+    get:
+      tags:
+        - notes
+      summary: Find Many notes
+      description: "**order_by**, **filter**, **limit**, **depth**, **starting_after** or **ending_before** can be provided to request your **notes**"
+      operationId: findManyNotes
+      parameters:
+        - "$ref": "#/components/parameters/orderBy"
+        - "$ref": "#/components/parameters/filter"
+        - "$ref": "#/components/parameters/limit"
+        - "$ref": "#/components/parameters/depth"
+        - "$ref": "#/components/parameters/startingAfter"
+        - "$ref": "#/components/parameters/endingBefore"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      notes:
+                        type: array
+                        items:
+                          "$ref": "#/components/schemas/NoteForResponse"
+                  pageInfo:
+                    type: object
+                    properties:
+                      hasNextPage:
+                        type: boolean
+                      startCursor:
+                        type: string
+                        format: uuid
+                      endCursor:
+                        type: string
+                        format: uuid
+                  totalCount:
+                    type: integer
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+  "/notes/{id}":
+    get:
+      tags:
+        - notes
+      summary: Find One note
+      description: "**depth** can be provided to request your **note**"
+      operationId: findOneNote
+      parameters:
+        - "$ref": "#/components/parameters/idPath"
+        - "$ref": "#/components/parameters/depth"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      note:
+                        "$ref": "#/components/schemas/NoteForResponse"
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Twenty API key. See `cato auth roles` for what a key can actually do."
+  parameters:
+    depth:
+      name: depth
+      in: query
+      description: |-
+        Determines the level of nested related objects to include in the response.
+            - 0: Primary object only
+            - 1: Primary object + direct relations
+      required: false
+      schema:
+        type: integer
+        enum:
+          - 0
+          - 1
+        default: 1
+    endingBefore:
+      name: ending_before
+      in: query
+      description: "Returns objects ending before a specific cursor. You can find cursors in **startCursor** and **endCursor** in **pageInfo** in response data"
+      required: false
+      schema:
+        type: string
+    filter:
+      name: filter
+      in: query
+      description: |-
+        Format: field[COMPARATOR]:value,field2[COMPARATOR]:value2.
+            For like/ilike, use % as a wildcard (e.g. %value% for substring match).
+            Refer to the filter section at the top of the page for more details.
+      required: false
+      schema:
+        type: string
+      examples:
+        simple:
+          value: "createdAt[gte]:\"2023-01-01\""
+          description: A simple filter param
+        simpleNested:
+          value: "emails.primaryEmail[eq]:foo99@example.com"
+          description: A simple composite type filter param
+        complex:
+          value: "or(createdAt[gte]:\"2024-01-01\",createdAt[lte]:\"2023-01-01\",not(id[is]:NULL))"
+          description: A more complex filter param
+        like:
+          value: "name[like]:\"%value%\""
+          description: Pattern matching
+    idPath:
+      name: id
+      in: path
+      description: Object id.
+      required: true
+      schema:
+        type: string
+        format: uuid
+    limit:
+      name: limit
+      in: query
+      description: Limits the number of objects returned.
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 200
+        default: 60
+    orderBy:
+      name: order_by
+      in: query
+      description: |-
+        Format: **field_name_1,field_name_2[DIRECTION_2]
+            Refer to the filter section at the top of the page for more details.
+      required: false
+      schema:
+        type: string
+      examples:
+        simple:
+          value: createdAt
+          summary: A simple order_by param
+        complex:
+          value: "id[AscNullsFirst],createdAt[DescNullsLast]"
+          summary: A more complex order_by param
+    startingAfter:
+      name: starting_after
+      in: query
+      description: "Returns objects starting after a specific cursor. You can find cursors in **startCursor** and **endCursor** in **pageInfo** in response data"
+      required: false
+      schema:
+        type: string
+  responses:
+    "400":
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              statusCode:
+                type: number
+              messages:
+                type: array
+                items:
+                  type: string
+              error:
+                type: string
+            example:
+              statusCode: 400
+              message: error message
+              error: Bad Request
+    "401":
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              statusCode:
+                type: number
+              message:
+                type: string
+              error:
+                type: string
+            example:
+              statusCode: 401
+              message: Token invalid.
+              error: Unauthorized
+  schemas:
+    AttachmentForResponse:
+      type: object
+      description: An attachment
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        name:
+          type: string
+          description: Attachment name
+        file:
+          type: array
+          items:
+            type: object
+            properties:
+              fileId:
+                type: string
+                format: uuid
+              label:
+                type: string
+              extension:
+                type: string
+              url:
+                type: string
+          description: Attachment file
+        fullPath:
+          type: string
+          description: Attachment full path
+        fileCategory:
+          type: string
+          enum:
+            - ARCHIVE
+            - AUDIO
+            - IMAGE
+            - PRESENTATION
+            - SPREADSHEET
+            - TEXT_DOCUMENT
+            - VIDEO
+            - OTHER
+          description: Attachment file category
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Attachment record position
+        targetTaskId:
+          type: string
+          format: uuid
+        targetNoteId:
+          type: string
+          format: uuid
+        targetPersonId:
+          type: string
+          format: uuid
+        targetCompanyId:
+          type: string
+          format: uuid
+        targetOpportunityId:
+          type: string
+          format: uuid
+        targetDashboardId:
+          type: string
+          format: uuid
+        targetWorkflowId:
+          type: string
+          format: uuid
+        targetTask:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/TaskForResponse"
+          description: Attachment target
+        targetNote:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/NoteForResponse"
+          description: Attachment target
+        targetPerson:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/PersonForResponse"
+          description: Attachment target
+        targetCompany:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/CompanyForResponse"
+          description: Attachment target
+        targetOpportunity:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/OpportunityForResponse"
+          description: Attachment target
+        targetDashboard:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/DashboardForResponse"
+          description: Attachment target
+        targetWorkflow:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkflowForResponse"
+          description: Attachment target
+    BlocklistForResponse:
+      type: object
+      description: Blocklist
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Blocklist record position
+        handle:
+          type: string
+          description: Handle
+        workspaceMemberId:
+          type: string
+          format: uuid
+        workspaceMember:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkspaceMemberForResponse"
+          description: WorkspaceMember
+    CalendarChannelEventAssociationForResponse:
+      type: object
+      description: Calendar Channel Event Associations
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Calendar channel event association record position
+        eventExternalId:
+          type: string
+          description: Event external ID
+        recurringEventExternalId:
+          type: string
+          description: Recurring Event ID
+        calendarChannelId:
+          type: string
+          format: uuid
+        calendarEventId:
+          type: string
+          format: uuid
+        calendarChannel:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/CalendarChannelForResponse"
+          description: Channel ID
+        calendarEvent:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/CalendarEventForResponse"
+          description: Event ID
+    CalendarChannelForResponse:
+      type: object
+      description: Calendar Channels
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Calendar channel record position
+        handle:
+          type: string
+          description: Handle
+        visibility:
+          type: string
+          enum:
+            - METADATA
+            - SHARE_EVERYTHING
+          description: Visibility
+        isContactAutoCreationEnabled:
+          type: boolean
+          description: Is Contact Auto Creation Enabled
+        contactAutoCreationPolicy:
+          type: string
+          enum:
+            - AS_PARTICIPANT_AND_ORGANIZER
+            - AS_PARTICIPANT
+            - AS_ORGANIZER
+            - NONE
+          description: Automatically create records for people you participated with in an event.
+        isSyncEnabled:
+          type: boolean
+          description: Is Sync Enabled
+        syncCursor:
+          type: string
+          description: Sync Cursor. Used for syncing events from the calendar provider
+        syncStatus:
+          type: string
+          enum:
+            - ONGOING
+            - NOT_SYNCED
+            - ACTIVE
+            - FAILED_INSUFFICIENT_PERMISSIONS
+            - FAILED_UNKNOWN
+          description: Sync status
+        syncStage:
+          type: string
+          enum:
+            - CALENDAR_EVENT_LIST_FETCH_PENDING
+            - CALENDAR_EVENT_LIST_FETCH_SCHEDULED
+            - CALENDAR_EVENT_LIST_FETCH_ONGOING
+            - CALENDAR_EVENTS_IMPORT_PENDING
+            - CALENDAR_EVENTS_IMPORT_SCHEDULED
+            - CALENDAR_EVENTS_IMPORT_ONGOING
+            - FAILED
+            - PENDING_CONFIGURATION
+          description: Sync stage
+        syncStageStartedAt:
+          type: string
+          format: date-time
+          description: Sync stage started at
+        syncedAt:
+          type: string
+          format: date-time
+          description: Last sync date
+        throttleFailureCount:
+          type: integer
+          description: Throttle Failure Count
+        connectedAccountId:
+          type: string
+          format: uuid
+        calendarChannelEventAssociations:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CalendarChannelEventAssociationForResponse"
+          description: Calendar Channel Event Associations
+        connectedAccount:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/ConnectedAccountForResponse"
+          description: Connected Account
+    CalendarEventForResponse:
+      type: object
+      description: Calendar events
+      properties:
+        location:
+          type: string
+          description: Location
+        isCanceled:
+          type: boolean
+          description: Is canceled
+        isFullDay:
+          type: boolean
+          description: Is Full Day
+        startsAt:
+          type: string
+          format: date-time
+          description: Start Date
+        endsAt:
+          type: string
+          format: date-time
+          description: End Date
+        externalCreatedAt:
+          type: string
+          format: date-time
+          description: Creation DateTime
+        externalUpdatedAt:
+          type: string
+          format: date-time
+          description: Update DateTime
+        description:
+          type: string
+          description: Description
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Calendar event record position
+        title:
+          type: string
+          description: Title
+        iCalUid:
+          type: string
+          description: iCal UID
+        conferenceSolution:
+          type: string
+          description: Conference Solution
+        conferenceLink:
+          type: object
+          properties:
+            primaryLinkLabel:
+              type: string
+            primaryLinkUrl:
+              type: string
+            secondaryLinks:
+              type: array
+              items:
+                type: object
+                description: A secondary link
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  label:
+                    type: string
+          description: Meet Link
+        calendarChannelEventAssociations:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CalendarChannelEventAssociationForResponse"
+          description: Calendar Channel Event Associations
+        calendarEventParticipants:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CalendarEventParticipantForResponse"
+          description: Event Participants
+    CalendarEventParticipantForResponse:
+      type: object
+      description: Calendar event participants
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Calendar event participant record position
+        handle:
+          type: string
+          description: Handle
+        displayName:
+          type: string
+          description: Display Name
+        isOrganizer:
+          type: boolean
+          description: Is Organizer
+        responseStatus:
+          type: string
+          enum:
+            - NEEDS_ACTION
+            - DECLINED
+            - TENTATIVE
+            - ACCEPTED
+          description: Response Status
+        calendarEventId:
+          type: string
+          format: uuid
+        personId:
+          type: string
+          format: uuid
+        workspaceMemberId:
+          type: string
+          format: uuid
+        calendarEvent:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/CalendarEventForResponse"
+          description: Event ID
+        person:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/PersonForResponse"
+          description: Person
+        workspaceMember:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkspaceMemberForResponse"
+          description: Workspace Member
+    CompanyForResponse:
+      type: object
+      description: A company
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        name:
+          type: string
+          description: The company name
+        domainName:
+          type: object
+          properties:
+            primaryLinkLabel:
+              type: string
+            primaryLinkUrl:
+              type: string
+            secondaryLinks:
+              type: array
+              items:
+                type: object
+                description: A secondary link
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  label:
+                    type: string
+          description: The company website URL. We use this url to fetch the company icon
+        address:
+          type: object
+          properties:
+            addressStreet1:
+              type: string
+            addressStreet2:
+              type: string
+            addressCity:
+              type: string
+            addressPostcode:
+              type: string
+            addressState:
+              type: string
+            addressCountry:
+              type: string
+            addressLat:
+              type: number
+            addressLng:
+              type: number
+          description: Address of the company
+        employees:
+          type: integer
+          description: Number of employees in the company
+        linkedinLink:
+          type: object
+          properties:
+            primaryLinkLabel:
+              type: string
+            primaryLinkUrl:
+              type: string
+            secondaryLinks:
+              type: array
+              items:
+                type: object
+                description: A secondary link
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  label:
+                    type: string
+          description: The company Linkedin account
+        xLink:
+          type: object
+          properties:
+            primaryLinkLabel:
+              type: string
+            primaryLinkUrl:
+              type: string
+            secondaryLinks:
+              type: array
+              items:
+                type: object
+                description: A secondary link
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  label:
+                    type: string
+          description: The company Twitter/X account
+        idealCustomerProfile:
+          type: boolean
+          description: "Ideal Customer Profile: Indicates whether the company is the most suitable and valuable customer for you"
+        position:
+          type: number
+          description: Company record position
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        accountOwnerId:
+          type: string
+          format: uuid
+        prudaiMarketingProductTarget:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSignalScore:
+          type: integer
+          description: debug
+        prudaiMarketingPlaybook:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingTrialState:
+          type: string
+          description: debug
+        prudaiMarketingLastTouchAt:
+          type: string
+          format: date-time
+          description: debug
+        prudaiMarketingOutreachState:
+          type: string
+          description: debug
+        prudaiMarketingN8nId:
+          type: string
+          description: debug
+        prudaiMarketingSuppressionFlags:
+          type: object
+          description: debug
+        prudaiMarketingLegacyHubspotId:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSendgridCategory:
+          type: string
+          description: debug
+        prudaiMarketingSourceInventoryId:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSourceSystem:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        marketingSelection:
+          type: string
+        product:
+          type: array
+          items:
+            type: string
+            enum:
+              - LEO
+              - VERA
+              - ZIA
+              - BEVER
+              - IRMA
+              - ORDO
+              - CATO
+        relatedTasksId:
+          type: string
+          format: uuid
+        visibility:
+          type: string
+          enum:
+            - MARKETING
+            - RESTRICTED
+        isenriched:
+          type: boolean
+        annualRecurringRevenue:
+          type: object
+          properties:
+            amountMicros:
+              type: number
+            currencyCode:
+              type: string
+          description: "Annual Recurring Revenue: The actual or estimated annual revenue of the company"
+        prudaiMarketingProductInterestSummary:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSourceContext:
+          type: object
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSourceSegment:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingPrimaryPhone:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingPhoneNumbers:
+          type: object
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSourceUrl:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingLastEngagementAt:
+          type: string
+          format: date-time
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        branche:
+          type: string
+          enum:
+            - ADVOCATUUR
+            - ARCHITECTUUR
+            - OVERHEID
+            - WONINGCORPORATIE
+        attachments:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AttachmentForResponse"
+          description: Attachments linked to the company
+        people:
+          type: array
+          items:
+            "$ref": "#/components/schemas/PersonForResponse"
+          description: People linked to the company.
+        accountOwner:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkspaceMemberForResponse"
+          description: Your team member responsible for managing the company account
+        taskTargets:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TaskTargetForResponse"
+          description: Tasks tied to the company
+        noteTargets:
+          type: array
+          items:
+            "$ref": "#/components/schemas/NoteTargetForResponse"
+          description: Notes tied to the company
+        opportunities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/OpportunityForResponse"
+          description: Opportunities linked to the company.
+        favorites:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FavoriteForResponse"
+          description: Favorites linked to the company
+        timelineActivities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TimelineActivityForResponse"
+          description: Timeline Activities linked to the company
+        relatedTasks:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/TaskForResponse"
+          description: Companies Task
+    ConnectedAccountForResponse:
+      type: object
+      description: A connected account
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Connected account record position
+        handle:
+          type: string
+          description: "The account handle (email, username, phone number, etc.)"
+        provider:
+          type: string
+          description: The account provider
+        accessToken:
+          type: string
+          description: Messaging provider access token
+        refreshToken:
+          type: string
+          description: Messaging provider refresh token
+        lastSyncHistoryId:
+          type: string
+          description: Last sync history ID
+        authFailedAt:
+          type: string
+          format: date-time
+          description: Auth failed at
+        lastCredentialsRefreshedAt:
+          type: string
+          format: date-time
+          description: Last credentials refreshed at
+        handleAliases:
+          type: string
+          description: Handle Aliases
+        scopes:
+          type: array
+          items:
+            type: string
+          description: Scopes
+        connectionParameters:
+          type: object
+          description: JSON object containing custom connection parameters
+        accountOwnerId:
+          type: string
+          format: uuid
+        calendarChannels:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CalendarChannelForResponse"
+          description: Calendar Channels
+        accountOwner:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkspaceMemberForResponse"
+          description: Account Owner
+        messageChannels:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MessageChannelForResponse"
+          description: Message Channels
+    DashboardForResponse:
+      type: object
+      description: A dashboard
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        title:
+          type: string
+          description: Dashboard title
+        position:
+          type: number
+          description: Dashboard record Position
+        pageLayoutId:
+          type: string
+          format: uuid
+          description: Dashboard page layout
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        attachments:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AttachmentForResponse"
+          description: Attachments linked to the dashboard
+        timelineActivities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TimelineActivityForResponse"
+          description: Timeline activities linked to the dashboard
+        favorites:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FavoriteForResponse"
+          description: Favorites linked to the dashboard
+    FavoriteFolderForResponse:
+      type: object
+      description: A favorite folder
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Favorite folder position
+        name:
+          type: string
+          description: Name of the favorite folder
+        favorites:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FavoriteForResponse"
+          description: Favorites in this folder
+    FavoriteForResponse:
+      type: object
+      description: A favorite
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Favorite position
+        viewId:
+          type: string
+          format: uuid
+          description: ViewId
+        companyId:
+          type: string
+          format: uuid
+        dashboardId:
+          type: string
+          format: uuid
+        forWorkspaceMemberId:
+          type: string
+          format: uuid
+        personId:
+          type: string
+          format: uuid
+        opportunityId:
+          type: string
+          format: uuid
+        workflowId:
+          type: string
+          format: uuid
+        workflowVersionId:
+          type: string
+          format: uuid
+        workflowRunId:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+        noteId:
+          type: string
+          format: uuid
+        favoriteFolderId:
+          type: string
+          format: uuid
+        company:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/CompanyForResponse"
+          description: Favorite company
+        dashboard:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/DashboardForResponse"
+          description: Favorite dashboard
+        forWorkspaceMember:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkspaceMemberForResponse"
+          description: Favorite workspace member
+        person:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/PersonForResponse"
+          description: Favorite person
+        opportunity:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/OpportunityForResponse"
+          description: Favorite opportunity
+        workflow:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkflowForResponse"
+          description: Favorite workflow
+        workflowVersion:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkflowVersionForResponse"
+          description: Favorite workflow version
+        workflowRun:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkflowRunForResponse"
+          description: Favorite workflow run
+        task:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/TaskForResponse"
+          description: Favorite task
+        note:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/NoteForResponse"
+          description: Favorite note
+        favoriteFolder:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/FavoriteFolderForResponse"
+          description: The folder this favorite belongs to
+    MessageChannelForResponse:
+      type: object
+      description: Message Channels
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Message Channel record position
+        visibility:
+          type: string
+          enum:
+            - METADATA
+            - SUBJECT
+            - SHARE_EVERYTHING
+          description: Visibility
+        handle:
+          type: string
+          description: Handle
+        type:
+          type: string
+          enum:
+            - EMAIL
+            - SMS
+          description: Channel Type
+        isContactAutoCreationEnabled:
+          type: boolean
+          description: Is Contact Auto Creation Enabled
+        contactAutoCreationPolicy:
+          type: string
+          enum:
+            - SENT_AND_RECEIVED
+            - SENT
+            - NONE
+          description: Automatically create People records when receiving or sending emails
+        messageFolderImportPolicy:
+          type: string
+          enum:
+            - ALL_FOLDERS
+            - SELECTED_FOLDERS
+          description: Message folder import policy
+        excludeNonProfessionalEmails:
+          type: boolean
+          description: Exclude non professional emails
+        excludeGroupEmails:
+          type: boolean
+          description: Exclude group emails
+        pendingGroupEmailsAction:
+          type: string
+          enum:
+            - GROUP_EMAILS_DELETION
+            - GROUP_EMAILS_IMPORT
+            - NONE
+          description: Pending action for group emails
+        isSyncEnabled:
+          type: boolean
+          description: Is Sync Enabled
+        syncCursor:
+          type: string
+          description: Last sync cursor
+        syncedAt:
+          type: string
+          format: date-time
+          description: Last sync date
+        syncStatus:
+          type: string
+          enum:
+            - ONGOING
+            - NOT_SYNCED
+            - ACTIVE
+            - FAILED_INSUFFICIENT_PERMISSIONS
+            - FAILED_UNKNOWN
+          description: Sync status
+        syncStage:
+          type: string
+          enum:
+            - MESSAGE_LIST_FETCH_PENDING
+            - MESSAGE_LIST_FETCH_SCHEDULED
+            - MESSAGE_LIST_FETCH_ONGOING
+            - MESSAGES_IMPORT_PENDING
+            - MESSAGES_IMPORT_SCHEDULED
+            - MESSAGES_IMPORT_ONGOING
+            - FAILED
+            - PENDING_CONFIGURATION
+          description: Sync stage
+        syncStageStartedAt:
+          type: string
+          format: date-time
+          description: Sync stage started at
+        throttleFailureCount:
+          type: integer
+          description: Throttle Failure Count
+        throttleRetryAfter:
+          type: string
+          format: date-time
+          description: Throttle Retry After
+        connectedAccountId:
+          type: string
+          format: uuid
+        connectedAccount:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/ConnectedAccountForResponse"
+          description: Connected Account
+        messageChannelMessageAssociations:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MessageChannelMessageAssociationForResponse"
+          description: Messages from the channel.
+        messageFolders:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MessageFolderForResponse"
+          description: Message Folders
+    MessageChannelMessageAssociationForResponse:
+      type: object
+      description: Message Synced with a Message Channel
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Message channel message association record position
+        messageExternalId:
+          type: string
+          description: Message id from the messaging provider
+        messageThreadExternalId:
+          type: string
+          description: Thread id from the messaging provider
+        direction:
+          type: string
+          enum:
+            - INCOMING
+            - OUTGOING
+          description: Message Direction
+        messageId:
+          type: string
+          format: uuid
+        messageChannelId:
+          type: string
+          format: uuid
+        messageThreadId:
+          type: string
+          format: uuid
+        message:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/MessageForResponse"
+          description: Message Id
+        messageChannel:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/MessageChannelForResponse"
+          description: Message Channel Id
+        messageThread:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/MessageThreadForResponse"
+          description: Message Thread Id
+        messageFolders:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MessageChannelMessageAssociationMessageFolderForResponse"
+          description: "Message Folders (supports multiple folders/labels)"
+    MessageChannelMessageAssociationMessageFolderForResponse:
+      type: object
+      description: Join table linking message channel message associations to message folders
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Message channel message association message folder record position
+        messageChannelMessageAssociationId:
+          type: string
+          format: uuid
+        messageFolderId:
+          type: string
+          format: uuid
+        messageChannelMessageAssociation:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/MessageChannelMessageAssociationForResponse"
+          description: Message Channel Message Association
+        messageFolder:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/MessageFolderForResponse"
+          description: Message Folder
+    MessageFolderForResponse:
+      type: object
+      description: Message Folders
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Message Folder record position
+        name:
+          type: string
+          description: Folder name
+        syncCursor:
+          type: string
+          description: Sync Cursor
+        isSentFolder:
+          type: boolean
+          description: Is Sent Folder
+        isSynced:
+          type: boolean
+          description: Is Synced
+        parentFolderId:
+          type: string
+          description: Parent Folder ID
+        externalId:
+          type: string
+          description: External ID
+        pendingSyncAction:
+          type: string
+          enum:
+            - FOLDER_DELETION
+            - NONE
+          description: Pending action for folder sync
+        messageChannelId:
+          type: string
+          format: uuid
+        messageChannel:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/MessageChannelForResponse"
+          description: Message Channel
+        messageChannelMessageAssociationMessageFolders:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MessageChannelMessageAssociationMessageFolderForResponse"
+          description: "Message Association Folders (supports multiple folders/labels)"
+    MessageForResponse:
+      type: object
+      description: Message
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Message record position
+        headerMessageId:
+          type: string
+          description: Message id from the message header
+        direction:
+          type: string
+          enum:
+            - INCOMING
+            - OUTGOING
+          description: Message Direction
+        subject:
+          type: string
+          description: Subject
+        text:
+          type: string
+          description: Text
+        receivedAt:
+          type: string
+          format: date-time
+          description: The date the message was received
+        messageThreadId:
+          type: string
+          format: uuid
+        messageThread:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/MessageThreadForResponse"
+          description: Message Thread Id
+        messageParticipants:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MessageParticipantForResponse"
+          description: Message Participants
+        messageChannelMessageAssociations:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MessageChannelMessageAssociationForResponse"
+          description: Messages from the channel.
+    MessageParticipantForResponse:
+      type: object
+      description: Message Participants
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Message Participant record position
+        role:
+          type: string
+          enum:
+            - FROM
+            - TO
+            - CC
+            - BCC
+          description: Role
+        handle:
+          type: string
+          description: Handle
+        displayName:
+          type: string
+          description: Display Name
+        messageId:
+          type: string
+          format: uuid
+        personId:
+          type: string
+          format: uuid
+        workspaceMemberId:
+          type: string
+          format: uuid
+        message:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/MessageForResponse"
+          description: Message
+        person:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/PersonForResponse"
+          description: Person
+        workspaceMember:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkspaceMemberForResponse"
+          description: Workspace member
+    MessageThreadForResponse:
+      type: object
+      description: Message Thread
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Message Thread record position
+        messages:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MessageForResponse"
+          description: Messages from the thread.
+        messageChannelMessageAssociations:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MessageChannelMessageAssociationForResponse"
+          description: Messages from the channel.
+    NoteForResponse:
+      type: object
+      description: A note
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        position:
+          type: number
+          description: Note record position
+        title:
+          type: string
+          description: Note title
+        bodyV2:
+          type: object
+          properties:
+            blocknote:
+              type: string
+            markdown:
+              type: string
+          description: Note body
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        assigneeId:
+          type: string
+          format: uuid
+        attachments:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AttachmentForResponse"
+          description: Note attachments
+        favorites:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FavoriteForResponse"
+          description: Favorites linked to the note
+        noteTargets:
+          type: array
+          items:
+            "$ref": "#/components/schemas/NoteTargetForResponse"
+          description: Note targets
+        timelineActivities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TimelineActivityForResponse"
+          description: Timeline Activities linked to the note.
+        assignee:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkspaceMemberForResponse"
+          description: Workspace member who owns this note.
+    NoteTargetForResponse:
+      type: object
+      description: A note target
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: NoteTarget record position
+        targetCompanyId:
+          type: string
+          format: uuid
+        noteId:
+          type: string
+          format: uuid
+        targetPersonId:
+          type: string
+          format: uuid
+        targetOpportunityId:
+          type: string
+          format: uuid
+        targetCompany:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/CompanyForResponse"
+          description: NoteTarget target
+        note:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/NoteForResponse"
+          description: NoteTarget note
+        targetPerson:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/PersonForResponse"
+          description: NoteTarget target
+        targetOpportunity:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/OpportunityForResponse"
+          description: NoteTarget target
+    OpportunityForResponse:
+      type: object
+      description: An opportunity
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        name:
+          type: string
+          description: The opportunity name
+        closeDate:
+          type: string
+          format: date-time
+          description: Opportunity close date
+        stage:
+          type: string
+          enum:
+            - NEW
+            - SCREENING
+            - MEETING
+            - PROPOSAL
+            - CUSTOMER
+          description: Opportunity stage
+        position:
+          type: number
+          description: Opportunity record position
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        companyId:
+          type: string
+          format: uuid
+        pointOfContactId:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        prudaiMarketingSourceSystem:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        amount:
+          type: object
+          properties:
+            amountMicros:
+              type: number
+            currencyCode:
+              type: string
+          description: Opportunity amount
+        prudaiMarketingSourceLabel:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingEngagementSummary:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingHandoffReason:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingHandoffCampaign:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        attachments:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AttachmentForResponse"
+          description: Attachments linked to the opportunity
+        company:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/CompanyForResponse"
+          description: Opportunity company
+        favorites:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FavoriteForResponse"
+          description: Favorites linked to the opportunity
+        noteTargets:
+          type: array
+          items:
+            "$ref": "#/components/schemas/NoteTargetForResponse"
+          description: Notes tied to the opportunity
+        pointOfContact:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/PersonForResponse"
+          description: Opportunity point of contact
+        taskTargets:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TaskTargetForResponse"
+          description: Tasks tied to the opportunity
+        timelineActivities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TimelineActivityForResponse"
+          description: Timeline Activities linked to the opportunity.
+        owner:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkspaceMemberForResponse"
+          description: Opportunity owner
+    PersonForResponse:
+      type: object
+      description: A person
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        name:
+          type: object
+          properties:
+            firstName:
+              type: string
+            lastName:
+              type: string
+          description: "Contact's name"
+        emails:
+          type: object
+          properties:
+            primaryEmail:
+              type: string
+            additionalEmails:
+              type: array
+              items:
+                type: string
+                format: email
+          description: "Contact's Emails"
+        linkedinLink:
+          type: object
+          properties:
+            primaryLinkLabel:
+              type: string
+            primaryLinkUrl:
+              type: string
+            secondaryLinks:
+              type: array
+              items:
+                type: object
+                description: A secondary link
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  label:
+                    type: string
+          description: "Contact's Linkedin account"
+        xLink:
+          type: object
+          properties:
+            primaryLinkLabel:
+              type: string
+            primaryLinkUrl:
+              type: string
+            secondaryLinks:
+              type: array
+              items:
+                type: object
+                description: A secondary link
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  label:
+                    type: string
+          description: "Contact's X/Twitter account"
+        jobTitle:
+          type: string
+          description: "Contact's job title"
+        city:
+          type: string
+          description: "Contact's city"
+        avatarUrl:
+          type: string
+          description: "Contact's avatar"
+        avatarFile:
+          type: array
+          items:
+            type: object
+            properties:
+              fileId:
+                type: string
+                format: uuid
+              label:
+                type: string
+              extension:
+                type: string
+              url:
+                type: string
+          description: "Contact's avatar file"
+        position:
+          type: number
+          description: Person record Position
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        companyId:
+          type: string
+          format: uuid
+        prudaiMarketingSignalScore:
+          type: integer
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingLegacyHubspotId:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingLastTouchAt:
+          type: string
+          format: date-time
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingN8nId:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingProductTarget:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingPlaybook:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSuppressionFlags:
+          type: object
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSourceInventoryId:
+          type: string
+          description: debug
+        prudaiMarketingOutreachState:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingTrialState:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSendgridCategory:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSourceSystem:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        visibility:
+          type: string
+          enum:
+            - MARKETING
+            - RESTRICTED
+        product:
+          type: array
+          items:
+            type: string
+            enum:
+              - LEO
+              - VERA
+              - ZIA
+              - BEVER
+              - IRMA
+              - ORDO
+              - CATO
+        branche:
+          type: string
+          enum:
+            - ADVOCATUUR
+            - ARCHITECTUUR
+            - OVERHEID
+            - WONINGCORPORATIE
+        becameSalesInterestAt:
+          type: string
+          format: date-time
+        isenriched:
+          type: boolean
+        doNotContact:
+          type: boolean
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        marketingOptOutAt:
+          type: string
+          format: date-time
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        assigneeId:
+          type: string
+          format: uuid
+        prudaiMarketingProductInterest:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingLastHumanEngagementAt:
+          type: string
+          format: date-time
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingPhoneNumbers:
+          type: object
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSourceContext:
+          type: object
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSourceSegment:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSourceUrl:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingLastCampaign:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSuppressionStatus:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingPrimaryPhone:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingStatus:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        salesStatus:
+          type: string
+          enum:
+            - TODO
+            - ON_HOLD
+            - SUCCESS
+            - REJECTED
+            - CALL
+            - LINKEDIN
+            - DEMO
+            - TEST_ACCOUNT
+        lastMailOpenedAt:
+          type: string
+          format: date-time
+        phones:
+          properties:
+            additionalPhones:
+              type: array
+              items:
+                type: string
+            primaryPhoneCountryCode:
+              type: string
+            primaryPhoneCallingCode:
+              type: string
+            primaryPhoneNumber:
+              type: string
+          type: object
+          description: "Contact's phone numbers"
+        attachments:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AttachmentForResponse"
+          description: Attachments linked to the contact.
+        calendarEventParticipants:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CalendarEventParticipantForResponse"
+          description: Calendar Event Participants
+        company:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/CompanyForResponse"
+          description: "Contact's company"
+        favorites:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FavoriteForResponse"
+          description: Favorites linked to the contact
+        messageParticipants:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MessageParticipantForResponse"
+          description: Message Participants
+        noteTargets:
+          type: array
+          items:
+            "$ref": "#/components/schemas/NoteTargetForResponse"
+          description: Notes tied to the contact
+        pointOfContactForOpportunities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/OpportunityForResponse"
+          description: List of opportunities for which that person is the point of contact
+        taskTargets:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TaskTargetForResponse"
+          description: Tasks tied to the contact
+        timelineActivities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TimelineActivityForResponse"
+          description: Events linked to the person
+        assignee:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkspaceMemberForResponse"
+          description: Workspace member who owns this person record.
+    TaskForResponse:
+      type: object
+      description: A task
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        position:
+          type: number
+          description: Task record position
+        title:
+          type: string
+          description: Task title
+        bodyV2:
+          type: object
+          properties:
+            blocknote:
+              type: string
+            markdown:
+              type: string
+          description: Task body
+        dueAt:
+          type: string
+          format: date-time
+          description: Task due date
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        assigneeId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - TODO
+            - IN_PROGRESS
+            - ON_HOLD
+            - HIGH_POTENTIAL
+            - SUCCESS
+            - REJECTED
+            - HIGH_PRIORITY
+            - DONE
+          description: Task status
+        attachments:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AttachmentForResponse"
+          description: Task attachments
+        favorites:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FavoriteForResponse"
+          description: Favorites linked to the task
+        taskTargets:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TaskTargetForResponse"
+          description: Task targets
+        assignee:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkspaceMemberForResponse"
+          description: Task assignee
+        timelineActivities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TimelineActivityForResponse"
+          description: Timeline Activities linked to the task.
+        company:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CompanyForResponse"
+          description: Tasks tied to the Company
+    TaskTargetForResponse:
+      type: object
+      description: A task target
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: TaskTarget record position
+        targetCompanyId:
+          type: string
+          format: uuid
+        targetOpportunityId:
+          type: string
+          format: uuid
+        targetPersonId:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+        targetCompany:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/CompanyForResponse"
+          description: TaskTarget target
+        targetOpportunity:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/OpportunityForResponse"
+          description: TaskTarget target
+        targetPerson:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/PersonForResponse"
+          description: TaskTarget target
+        task:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/TaskForResponse"
+          description: TaskTarget task
+    TimelineActivityForResponse:
+      type: object
+      description: Aggregated / filtered event to be displayed on the timeline
+      properties:
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: Timeline activity record position
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        happensAt:
+          type: string
+          format: date-time
+          description: Creation date
+        name:
+          type: string
+          description: Event name
+        properties:
+          type: object
+          description: Json value for event details
+        linkedRecordCachedName:
+          type: string
+          description: Cached record name
+        linkedRecordId:
+          type: string
+          format: uuid
+          description: Linked Record id
+        linkedObjectMetadataId:
+          type: string
+          format: uuid
+          description: Linked Object Metadata Id
+        targetCompanyId:
+          type: string
+          format: uuid
+        targetDashboardId:
+          type: string
+          format: uuid
+        targetNoteId:
+          type: string
+          format: uuid
+        targetOpportunityId:
+          type: string
+          format: uuid
+        targetPersonId:
+          type: string
+          format: uuid
+        targetTaskId:
+          type: string
+          format: uuid
+        workspaceMemberId:
+          type: string
+          format: uuid
+        targetWorkflowId:
+          type: string
+          format: uuid
+        targetWorkflowVersionId:
+          type: string
+          format: uuid
+        targetWorkflowRunId:
+          type: string
+          format: uuid
+        targetCompany:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/CompanyForResponse"
+          description: Event target
+        targetDashboard:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/DashboardForResponse"
+          description: Event target
+        targetNote:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/NoteForResponse"
+          description: Event target
+        targetOpportunity:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/OpportunityForResponse"
+          description: Event target
+        targetPerson:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/PersonForResponse"
+          description: Event target
+        targetTask:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/TaskForResponse"
+          description: Event target
+        workspaceMember:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkspaceMemberForResponse"
+          description: Event workspace member
+        targetWorkflow:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkflowForResponse"
+          description: Event target
+        targetWorkflowVersion:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkflowVersionForResponse"
+          description: Event target
+        targetWorkflowRun:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkflowRunForResponse"
+          description: Event target
+    WorkflowAutomatedTriggerForResponse:
+      type: object
+      description: A workflow automated trigger
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: WorkflowAutomatedTrigger record position
+        type:
+          type: string
+          enum:
+            - DATABASE_EVENT
+            - CRON
+          description: The workflow automated trigger type
+        settings:
+          type: object
+          description: The workflow automated trigger settings
+        workflowId:
+          type: string
+          format: uuid
+        workflow:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkflowForResponse"
+          description: WorkflowAutomatedTrigger workflow
+    WorkflowForResponse:
+      type: object
+      description: A workflow
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        name:
+          type: string
+          description: The workflow name
+        lastPublishedVersionId:
+          type: string
+          description: The workflow last published version id
+        statuses:
+          type: array
+          items:
+            type: string
+            enum:
+              - DRAFT
+              - ACTIVE
+              - DEACTIVATED
+          description: The current statuses of the workflow versions
+        position:
+          type: number
+          description: Workflow record position
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        attachments:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AttachmentForResponse"
+          description: Attachments linked to the workflow
+        favorites:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FavoriteForResponse"
+          description: Favorites linked to the workflow
+        timelineActivities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TimelineActivityForResponse"
+          description: Timeline activities linked to the workflow
+        versions:
+          type: array
+          items:
+            "$ref": "#/components/schemas/WorkflowVersionForResponse"
+          description: Workflow versions linked to the workflow.
+        runs:
+          type: array
+          items:
+            "$ref": "#/components/schemas/WorkflowRunForResponse"
+          description: Workflow runs linked to the workflow.
+        automatedTriggers:
+          type: array
+          items:
+            "$ref": "#/components/schemas/WorkflowAutomatedTriggerForResponse"
+          description: Workflow automated triggers linked to the workflow.
+    WorkflowRunForResponse:
+      type: object
+      description: A workflow run
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        name:
+          type: string
+          description: Name of the workflow run
+        enqueuedAt:
+          type: string
+          format: date-time
+          description: Workflow run enqueued at
+        startedAt:
+          type: string
+          format: date-time
+          description: Workflow run started at
+        endedAt:
+          type: string
+          format: date-time
+          description: Workflow run ended at
+        status:
+          type: string
+          enum:
+            - NOT_STARTED
+            - RUNNING
+            - COMPLETED
+            - FAILED
+            - ENQUEUED
+            - STOPPING
+            - STOPPED
+          description: Workflow run status
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The executor of the workflow
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        state:
+          type: object
+          description: State of the workflow run
+        context:
+          type: object
+          description: Context of the workflow run
+        output:
+          type: object
+          description: Output of the workflow run
+        position:
+          type: number
+          description: Workflow run position
+        workflowId:
+          type: string
+          format: uuid
+        workflowVersionId:
+          type: string
+          format: uuid
+        favorites:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FavoriteForResponse"
+          description: Favorites linked to the workflow run
+        timelineActivities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TimelineActivityForResponse"
+          description: Timeline activities linked to the run
+        workflow:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkflowForResponse"
+          description: Workflow linked to the run.
+        workflowVersion:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkflowVersionForResponse"
+          description: Workflow version linked to the run.
+    WorkflowVersionForResponse:
+      type: object
+      description: A workflow version
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        name:
+          type: string
+          description: The workflow version name
+        trigger:
+          type: object
+          description: Json object to provide trigger
+        steps:
+          type: object
+          description: Json object to provide steps
+        status:
+          type: string
+          enum:
+            - DRAFT
+            - ACTIVE
+            - DEACTIVATED
+            - ARCHIVED
+          description: The workflow version status
+        position:
+          type: number
+          description: Workflow version position
+        workflowId:
+          type: string
+          format: uuid
+        favorites:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FavoriteForResponse"
+          description: Favorites linked to the workflow version
+        timelineActivities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TimelineActivityForResponse"
+          description: Timeline activities linked to the version
+        workflow:
+          type: object
+          oneOf:
+            - "$ref": "#/components/schemas/WorkflowForResponse"
+          description: WorkflowVersion workflow
+        runs:
+          type: array
+          items:
+            "$ref": "#/components/schemas/WorkflowRunForResponse"
+          description: Workflow runs linked to the version.
+    WorkspaceMemberForResponse:
+      type: object
+      description: A workspace member
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation date
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last time the record was changed
+        deletedAt:
+          type: string
+          format: date-time
+          description: Date when the record was deleted
+        position:
+          type: number
+          description: Workspace member position
+        name:
+          type: object
+          properties:
+            firstName:
+              type: string
+            lastName:
+              type: string
+          description: Workspace member name
+        colorScheme:
+          type: string
+          description: Preferred color scheme
+        locale:
+          type: string
+          description: Preferred language
+        avatarUrl:
+          type: string
+          description: Workspace member avatar
+        userEmail:
+          type: string
+          description: Related user email address
+        calendarStartDay:
+          type: integer
+          description: "User's preferred start day of the week"
+        userId:
+          type: string
+          format: uuid
+          description: Associated User Id
+        timeZone:
+          type: string
+          description: User time zone
+        dateFormat:
+          type: string
+          enum:
+            - SYSTEM
+            - MONTH_FIRST
+            - DAY_FIRST
+            - YEAR_FIRST
+          description: "User's preferred date format"
+        timeFormat:
+          type: string
+          enum:
+            - SYSTEM
+            - HOUR_24
+            - HOUR_12
+          description: "User's preferred time format"
+        numberFormat:
+          type: string
+          enum:
+            - SYSTEM
+            - COMMAS_AND_DOT
+            - SPACES_AND_COMMA
+            - DOTS_AND_COMMA
+            - APOSTROPHE_AND_DOT
+          description: "User's preferred number format"
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+            workspaceMemberId:
+              type: string
+              format: uuid
+            name:
+              type: string
+          description: The workspace member who last updated the record
+        blocklist:
+          type: array
+          items:
+            "$ref": "#/components/schemas/BlocklistForResponse"
+          description: Blocklisted handles
+        calendarEventParticipants:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CalendarEventParticipantForResponse"
+          description: Calendar Event Participants
+        accountOwnerForCompanies:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CompanyForResponse"
+          description: Account owner for companies
+        connectedAccounts:
+          type: array
+          items:
+            "$ref": "#/components/schemas/ConnectedAccountForResponse"
+          description: Connected accounts
+        favorites:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FavoriteForResponse"
+          description: Favorites linked to the workspace member
+        messageParticipants:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MessageParticipantForResponse"
+          description: Message Participants
+        ownedOpportunities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/OpportunityForResponse"
+          description: Opportunities owned by the workspace member
+        assignedTasks:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TaskForResponse"
+          description: Tasks assigned to the workspace member
+        timelineActivities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TimelineActivityForResponse"
+          description: Events linked to the workspace member
+        assignedPeople:
+          type: array
+          items:
+            "$ref": "#/components/schemas/PersonForResponse"
+          description: Workspace member who owns this person record.
+        assignedNotes:
+          type: array
+          items:
+            "$ref": "#/components/schemas/NoteForResponse"
+          description: Workspace member who owns this note.

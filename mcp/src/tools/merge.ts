@@ -1,5 +1,4 @@
-import { buildListQuery, type RestClient } from "../rest.ts";
-import { createTargetsForRecord } from "../transforms.ts";
+import { buildListQuery, type RestClient, createTargetsForRecord } from "@twenty-crm/core";
 import { text } from "./_render.ts";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolHandler } from "../types.ts";

@@ -1,6 +1,4 @@
-import { buildListQuery, type RestClient } from "../rest.ts";
-import { transformCompanyData, type CompanyInput } from "../transforms.ts";
-import { combineWithSoftDelete } from "../filter.ts";
+import { buildListQuery, type RestClient, transformCompanyData, type CompanyInput, combineWithSoftDelete } from "@twenty-crm/core";
 import { text, ok } from "./_render.ts";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolHandler } from "../types.ts";

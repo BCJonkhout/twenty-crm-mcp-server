@@ -435,10 +435,7 @@ describe("Search", () => {
 // Unit tests for the helper modules
 // ---------------------------------------------------------------------------
 
-import { buildListQuery } from "./src/rest.ts";
-import { escapeFilterValue, andExpr, orExpr, combineWithSoftDelete, clause } from "./src/filter.ts";
-import { buildWrappedSql } from "./src/psql.ts";
-import { transformPersonData, transformCompanyData, transformBodyField } from "./src/transforms.ts";
+import { buildListQuery, escapeFilterValue, andExpr, orExpr, combineWithSoftDelete, clause, buildWrappedSql, transformPersonData, transformCompanyData, transformBodyField } from "@twenty-crm/core";
 
 describe("filter.ts", () => {
   it("escapeFilterValue handles strings, numbers, arrays, null", () => {
@@ -502,7 +499,7 @@ describe("psql.ts safety guard", () => {
   });
 
   it("assertReadonly rejects writes via runReadonlySql", async () => {
-    const { runReadonlySql } = await import("./src/psql.ts");
+    const { runReadonlySql } = await import("@twenty-crm/core");
     expect(runReadonlySql("DELETE FROM person")).rejects.toThrow(/must start with SELECT/);
     expect(runReadonlySql("INSERT INTO person VALUES (1)")).rejects.toThrow(/must start with SELECT/);
     expect(runReadonlySql("SELECT 1; DROP TABLE x")).rejects.toThrow(/forbidden keyword/);

@@ -1,0 +1,24 @@
+{
+  "name": "@twenty-crm/core",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Shared Twenty CRM client kernel: REST client, filter grammar, GraphQL helper, read-only SQL, field transforms.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./rest": "./src/rest.ts",
+    "./filter": "./src/filter.ts",
+    "./graphql": "./src/graphql.ts",
+    "./psql": "./src/psql.ts",
+    "./transforms": "./src/transforms.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ../tsconfig.json",
+    "test": "bun test ../core/tests"
+  },
+  "dependencies": {
+    "pg": "^8.20.0"
+  },
+  "license": "MIT"
+}

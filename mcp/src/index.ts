@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { createRestClient } from "./rest.ts";
+import { createRestClient } from "@twenty-crm/core";
 import type { ToolHandler, ToolModule } from "./types.ts";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 

@@ -1,0 +1,22 @@
+{
+  "name": "@twenty-crm/mcp",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Model Context Protocol server for Twenty CRM. Entry point: mcp/src/index.ts (run with Bun).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "bin": {
+    "twenty-crm-mcp-server": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --inspect run src/index.ts",
+    "smoke": "bun run smoke.ts",
+    "test": "bun test ../mcp/test.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "@twenty-crm/core": "workspace:*"
+  },
+  "license": "MIT"
+}

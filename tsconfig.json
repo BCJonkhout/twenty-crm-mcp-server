@@ -13,7 +13,12 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "types": ["bun"],
-    "lib": ["ES2022"]
+    "lib": ["ES2022"],
+    "baseUrl": ".",
+    "paths": {
+      "@twenty-crm/core": ["./core/src/index.ts"],
+      "@twenty-crm/core/*": ["./core/src/*"]
+    }
   },
-  "include": ["src/**/*", "test.test.ts", "smoke.ts"]
+  "include": ["core/**/*", "mcp/**/*", "cli/**/*"]
 }

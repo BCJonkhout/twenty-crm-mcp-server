@@ -1,4 +1,4 @@
-import { buildListQuery, type RestClient } from "../rest.ts";
+import { buildListQuery, type RestClient } from "@twenty-crm/core";
 import { text, ok } from "./_render.ts";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolHandler } from "../types.ts";

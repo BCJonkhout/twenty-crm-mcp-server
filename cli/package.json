@@ -1,0 +1,20 @@
+{
+  "name": "@twenty-crm/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "`cato` — read-first command line interface for PrudAI's Twenty CRM instance (CATO).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "bin": {
+    "cato": "./src/index.ts"
+  },
+  "scripts": {
+    "cato": "bun run src/index.ts",
+    "test": "bun test ../cli/tests",
+    "openapi:generate": "bun run scripts/generate-openapi.ts"
+  },
+  "dependencies": {
+    "@twenty-crm/core": "workspace:*"
+  },
+  "license": "MIT"
+}

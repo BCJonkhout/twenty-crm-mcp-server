@@ -1,22 +1,22 @@
 {
-  "name": "twenty-crm-mcp-server",
-  "version": "0.3.0",
-  "description": "A Model Context Protocol (MCP) server for Twenty CRM integration. Enables natural language interactions with your CRM data through Claude and other AI assistants.",
+  "name": "twenty-crm-monorepo",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Twenty CRM (PrudAI \"CATO\") tooling monorepo: shared client core, MCP server, and the `cato` CLI.",
   "type": "module",
-  "main": "src/index.ts",
-  "bin": {
-    "twenty-crm-mcp-server": "src/index.ts"
-  },
+  "workspaces": [
+    "core",
+    "mcp",
+    "cli"
+  ],
   "scripts": {
-    "start": "bun run src/index.ts",
-    "dev": "bun --inspect run src/index.ts",
+    "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "smoke": "bun run smoke.ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.6.0",
-    "pg": "^8.20.0"
+    "test:unit": "bun test cli/tests core/tests",
+    "cato": "bun run cli/src/index.ts",
+    "start": "bun run mcp/src/index.ts",
+    "smoke": "bun run mcp/smoke.ts",
+    "openapi:generate": "bun run cli/scripts/generate-openapi.ts"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
@@ -31,13 +31,10 @@
     "mcp",
     "twenty",
     "crm",
-    "server",
-    "claude",
-    "ai",
-    "assistant",
-    "natural-language",
-    "api",
-    "integration",
+    "cli",
+    "cato",
+    "prudai",
+    "openapi",
     "typescript"
   ],
   "author": "mhenry3164",
