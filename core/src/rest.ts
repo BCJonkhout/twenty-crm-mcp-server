@@ -1,9 +1,23 @@
 // HTTP client for Twenty CRM REST API.
 // Adds timeout + retry/backoff over the old one-liner fetch.
+//
+// Retry safety, which is the subtle part:
+//   * 429 means the server refused the request outright — it did not run, so
+//     replaying it is safe for any method.
+//   * 5xx, a timeout or a dropped connection are AMBIGUOUS for a write: the
+//     row may already exist. Replaying a POST there duplicates records, so
+//     non-idempotent methods only ever retry on 429.
+//   * GET/PUT/DELETE/HEAD/OPTIONS are idempotent by definition and retry on
+//     everything retryable.
+// Callers with a POST that is genuinely safe to replay (a search-style route,
+// or one with a server-side upsert key) can opt in with `idempotent: true`.
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const RETRYABLE = new Set<number>([429, 500, 502, 503, 504]);
+const RATE_LIMITED = 429;
 const MAX_RETRIES = 4;
+const MAX_BACKOFF_MS = 8_000;
+const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "PUT", "DELETE", "OPTIONS"]);
 
 export interface RestClientOptions {
   apiKey: string;
@@ -14,6 +28,49 @@ export interface RequestOptions {
   method?: string;
   body?: unknown;
   timeoutMs?: number;
+  /**
+   * Force this request to be treated as safe to replay. Only set it when the
+   * endpoint is genuinely idempotent — a duplicate write is worse than a
+   * failed one.
+   */
+  idempotent?: boolean;
+}
+
+/** Whether replaying this request can create a second copy of something. */
+export function isIdempotent(method: string, override?: boolean): boolean {
+  if (override !== undefined) return override;
+  return IDEMPOTENT_METHODS.has(method.toUpperCase());
+}
+
+/**
+ * Exponential backoff with full jitter. Without jitter, several clients that
+ * are rate-limited together retry in lockstep and hit the same wall again.
+ */
+export function backoffMs(attempt: number, retryAfterSeconds?: number, random = Math.random): number {
+  if (Number.isFinite(retryAfterSeconds) && (retryAfterSeconds as number) > 0) {
+    return (retryAfterSeconds as number) * 1000;
+  }
+  const ceiling = Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS);
+  return Math.round(ceiling / 2 + random() * (ceiling / 2));
+}
+
+/** The retry decision, split out so it can be tested without a socket. */
+export function shouldRetry(input: {
+  attempt: number;
+  method: string;
+  idempotent?: boolean;
+  status?: number;
+  networkError?: boolean;
+}): boolean {
+  if (input.attempt >= MAX_RETRIES) return false;
+
+  const safeToReplay = isIdempotent(input.method, input.idempotent);
+
+  if (input.status === RATE_LIMITED) return true;
+  if (!safeToReplay) return false;
+
+  if (input.networkError) return true;
+  return input.status !== undefined && RETRYABLE.has(input.status);
 }
 
 export interface RestClient {
@@ -28,7 +85,12 @@ export function createRestClient({ apiKey, baseUrl }: RestClientOptions): RestCl
 
   async function request<T = unknown>(
     endpoint: string,
-    { method = "GET", body = null, timeoutMs = DEFAULT_TIMEOUT_MS }: RequestOptions = {},
+    {
+      method = "GET",
+      body = null,
+      timeoutMs = DEFAULT_TIMEOUT_MS,
+      idempotent,
+    }: RequestOptions = {},
   ): Promise<T> {
     const url = endpoint.startsWith("http") ? endpoint : `${baseUrl}${endpoint}`;
     const headers: Record<string, string> = {
@@ -56,18 +118,22 @@ export function createRestClient({ apiKey, baseUrl }: RestClientOptions): RestCl
           return (text ? JSON.parse(text) : null) as T;
         }
 
-        if (RETRYABLE.has(res.status) && attempt < MAX_RETRIES) {
+        if (shouldRetry({ attempt, method, idempotent, status: res.status })) {
           const retryAfter = Number(res.headers.get("retry-after"));
-          const backoffMs = Number.isFinite(retryAfter) && retryAfter > 0
-            ? retryAfter * 1000
-            : Math.min(1000 * 2 ** attempt, 8000);
-          await sleep(backoffMs);
+          await sleep(backoffMs(attempt, retryAfter));
           attempt++;
           continue;
         }
 
         const errBody = await res.text().catch(() => "");
-        throw new Error(`Twenty API ${method} ${endpoint} → HTTP ${res.status}: ${errBody.slice(0, 600)}`);
+        const unsafeToReplay =
+          RETRYABLE.has(res.status) && !isIdempotent(method, idempotent) && res.status !== RATE_LIMITED;
+        const suffix = unsafeToReplay
+          ? ` (not retried: replaying a ${method} after ${res.status} could duplicate the write)`
+          : "";
+        throw new Error(
+          `Twenty API ${method} ${endpoint} → HTTP ${res.status}: ${errBody.slice(0, 600)}${suffix}`,
+        );
       } catch (err) {
         clearTimeout(timer);
         const e = err as Error;
@@ -76,10 +142,16 @@ export function createRestClient({ apiKey, baseUrl }: RestClientOptions): RestCl
         } else {
           lastErr = e;
         }
-        if (attempt < MAX_RETRIES && (e.name === "AbortError" || /fetch failed|network/i.test(e.message))) {
-          await sleep(Math.min(1000 * 2 ** attempt, 8000));
+        const isNetworkError = e.name === "AbortError" || /fetch failed|network/i.test(e.message);
+        if (shouldRetry({ attempt, method, idempotent, networkError: isNetworkError })) {
+          await sleep(backoffMs(attempt));
           attempt++;
           continue;
+        }
+        if (isNetworkError && !isIdempotent(method, idempotent)) {
+          lastErr = new Error(
+            `${lastErr.message} (not retried: a ${method} may already have been applied server-side)`,
+          );
         }
         throw lastErr;
       }

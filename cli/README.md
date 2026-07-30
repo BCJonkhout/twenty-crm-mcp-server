@@ -87,11 +87,16 @@ selecteren.
 Schrijfacties (`approve`, `reject`, `send-now`) vereisen `--no-dry-run --yes` en tonen eerst hoeveel
 ontvangers je raakt.
 
-> **De marketing-module accepteert geen API-key.** `marketing-access.service.ts` geeft elke
-> auth-context die geen *user* is `accessLevel: 'none'`. Voor alles onder `cato marketing` heb je een
-> **user-sessietoken** nodig (`cato auth set --user-token <token>` of `$CATO_USER_TOKEN`), af te lezen
-> uit een ingelogde CATO-browsersessie. Een agent met alleen een API-key kan CRM-data lezen en
-> schrijven, maar géén campagne starten.
+> **Sinds 2026-07-30 accepteert de marketing-module ook API-keys** (server-commit `3c570e37`). De
+> sleutel wordt door dezelfde rol-check gehaald als een gebruiker: alleen een rol die marketing mag
+> beheren komt erdoor. Een API-key krijgt nooit het `sales_rep`-niveau, omdat dat op
+> `workspaceMemberId` scopet en een sleutel geen workspace-member heeft.
+>
+> Een user-sessietoken werkt nog steeds en blijft nodig voor endpoints buiten deze module.
+>
+> ⚠️ Op dit moment kan alleen de **Admin**-rol aan een API-key worden gekoppeld, en die mag marketing
+> beheren. Elke uitgegeven sleutel kan dus campagnes goedkeuren. Wie een sleutel met minder rechten
+> wil uitgeven, moet eerst een beperktere rol aanmaken met `canBeAssignedToApiKeys = true`.
 
 ## Wat dit bewust NIET doet
 
@@ -102,6 +107,21 @@ ontvangers je raakt.
   server, niet via de CLI.
 - **Geen schrijfpad in `import`** zonder `--source-system`; mét die vlag alleen herkomstvelden.
 - **Geen secrets in de repo.** De CLI leest bij voorkeur uit OpenBao (`kv/prod/prudai-twenty/app`).
+
+## Ratelimits en herhaalpogingen
+
+De CLI deelt zijn HTTP-laag met de MCP-server (`core/src/rest.ts`), dus beide gedragen zich
+identiek: 30 s timeout per verzoek, maximaal 4 herhalingen, en bij een `Retry-After`-header wordt
+exact zolang gewacht als de server vraagt. Zonder die header geldt exponentiële backoff met jitter
+(±0,5–1 s, 1–2 s, 2–4 s, tot maximaal 8 s), zodat parallelle clients niet in hetzelfde ritme
+terugkomen.
+
+**Een POST of PATCH wordt alleen herhaald na een 429.** Dan heeft de server het verzoek aantoonbaar
+geweigerd en is er niets uitgevoerd. Na een 5xx, een timeout of een verbroken verbinding weet je dat
+níet — de rij kan al geschreven zijn — dus stopt de client en zegt hij in de foutmelding waaróm hij
+niet opnieuw geprobeerd heeft. Alleen `GET`, `PUT`, `DELETE`, `HEAD` en `OPTIONS` worden bij die
+fouten herhaald. Een endpoint dat als POST is vormgegeven maar echt herhaalbaar is, kan zich
+aanmelden met `idempotent: true`.
 
 ## Bekende afwijking
 
