@@ -12,15 +12,19 @@ const QUEUE: ReviewQueueItem[] = [
 ];
 
 describe("assertMarketingAuth", () => {
-  it("refuses to proceed with only an API key", () => {
-    // The marketing module gives any non-user auth context accessLevel 'none',
-    // so failing here with an explanation beats a bare 403 from the server.
+  it("refuses to proceed with no credential at all", () => {
     expect(() => assertMarketingAuth(undefined)).toThrow(MarketingAuthError);
-    expect(() => assertMarketingAuth(undefined)).toThrow(/USER session token/);
+    expect(() => assertMarketingAuth(undefined, undefined)).toThrow(/needs a credential/);
   });
 
-  it("passes a user token through", () => {
-    expect(assertMarketingAuth("usr-token")).toBe("usr-token");
+  // Server-commit 3c570e37 opened the module to API keys whose role may manage
+  // marketing, so refusing one here would block something the server allows.
+  it("accepts an API key when there is no user token", () => {
+    expect(assertMarketingAuth(undefined, "api-key")).toBe("api-key");
+  });
+
+  it("prefers the user token when both are present", () => {
+    expect(assertMarketingAuth("usr-token", "api-key")).toBe("usr-token");
   });
 });
 

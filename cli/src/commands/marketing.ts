@@ -82,16 +82,25 @@ export function filterReviewQueue(
   return items.filter((item) => (item.approvalState ?? "").toLowerCase() === state);
 }
 
-export function assertMarketingAuth(userToken: string | undefined): string {
-  if (!userToken) {
+/**
+ * Since server-commit 3c570e37 the marketing module accepts an API key too, as
+ * long as its role may manage marketing. A user token still wins when both are
+ * present: it carries the workspace member the module scopes some reads by.
+ */
+export function assertMarketingAuth(
+  userToken: string | undefined,
+  apiKey?: string,
+): string {
+  const credential = userToken ?? apiKey;
+  if (!credential) {
     throw new MarketingAuthError(
-      "cato marketing needs a USER session token; an API key cannot reach the marketing module.\n" +
-        "  Reason: marketing-access.service.ts grants accessLevel 'none' to any auth context that is not a user.\n" +
-        "  Fix   : cato auth set --profile <name> --user-token <token>   (or export CATO_USER_TOKEN)\n" +
-        "  The token is the accessToken from a signed-in CATO browser session.",
+      "cato marketing needs a credential: a user session token or an API key whose role may manage marketing.\n" +
+        "  Fix: cato auth set --profile <name> --stdin            (API key)\n" +
+        "       cato auth set --profile <name> --user-token <t>   (browser session token)\n" +
+        "  Check what a credential may do with: cato marketing access",
     );
   }
-  return userToken;
+  return credential;
 }
 
 export async function getAccess(client: RestClient): Promise<MarketingAccess> {

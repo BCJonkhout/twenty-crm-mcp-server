@@ -64,6 +64,27 @@ cato marketing events                 # opens, clicks, bounces, unsubscribes
 cato marketing schedule               # de weekly windows
 ```
 
+### Volledige dekking
+
+Alle 51 endpoints van de marketing-module zijn via de CLI bereikbaar. Commando's met meerdere
+acties nemen die als eerste argument:
+
+```sh
+cato marketing access                                    # wat mag deze credential
+cato marketing research  status|start|stop|target --campaign <id>
+cato marketing candidates list|attach|remove|attach-crm|staged --campaign <id> --ids a,b,c
+cato marketing members   list|add|bulk|attach-matching|remove|stop|mark-todo --campaign <id>
+cato marketing targets   list|add|add-matching|remove --campaign <id>
+cato marketing prompts   get|set --campaign <id> --body '<json>'
+cato marketing schedule  get|set --campaign <id> --body '<json>'
+cato marketing search-settings get|set --campaign <id> --body '<json>'
+cato marketing assets    list|create|update
+cato marketing update|archive|restore|delete --campaign <id>
+cato marketing regenerate --touchpoint <id>
+cato marketing bulk-approve --campaign <id>              # toont eerst hoeveel
+cato marketing people | filter-options | crm-picker      # opzoeklijsten
+```
+
 ### Een campagne opzetten
 
 De volledige keten, in werkvolgorde. Elke stap is dry-run tenzij je `--no-dry-run --yes` toevoegt:
@@ -87,7 +108,7 @@ selecteren.
 Schrijfacties (`approve`, `reject`, `send-now`) vereisen `--no-dry-run --yes` en tonen eerst hoeveel
 ontvangers je raakt.
 
-> **Sinds 2026-07-30 accepteert de marketing-module ook API-keys** (server-commit `3c570e37`). De
+> **Sinds 2026-07-30 accepteert de marketing-module ook API-keys** (en de CLI dus ook) (server-commit `3c570e37`). De
 > sleutel wordt door dezelfde rol-check gehaald als een gebruiker: alleen een rol die marketing mag
 > beheren komt erdoor. Een API-key krijgt nooit het `sales_rep`-niveau, omdat dat op
 > `workspaceMemberId` scopet en een sleutel geen workspace-member heeft.

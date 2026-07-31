@@ -27,6 +27,7 @@ import {
 import * as auth from "./commands/auth.ts";
 import * as marketing from "./commands/marketing.ts";
 import * as build from "./commands/campaignBuild.ts";
+import * as api from "./commands/marketingApi.ts";
 import { DEFAULT_BASE_URL, indexUrl, marketingUrl, recordUrl } from "./urls.ts";
 import { createGraphQLTransport, currentWorkspace } from "./auth-api.ts";
 
@@ -411,7 +412,7 @@ async function runMarketing(
   const clientFor = async (): Promise<RestClient> => {
     if (cached) return cached;
     const creds = await resolveAuth(flags);
-    const userToken = marketing.assertMarketingAuth(creds.userToken);
+    const userToken = marketing.assertMarketingAuth(creds.userToken, creds.apiKey);
     cached = restClient(creds, userToken);
     return cached;
   };
@@ -432,9 +433,12 @@ async function runMarketing(
     return 0;
   }
 
-  // `create` is the one subcommand that brings a campaign into existence, so it
-  // is the one subcommand that cannot be asked for a campaign id.
-  if (sub !== "create" && !campaignId) {
+  // Not everything hangs off a campaign: `create` brings one into existence,
+  // and the lookups are workspace-wide.
+  const CAMPAIGN_FREE = new Set([
+    "create", "access", "people", "filter-options", "crm-picker", "assets", "regenerate",
+  ]);
+  if (!CAMPAIGN_FREE.has(sub) && !campaignId) {
     throw new CliError(`cato marketing ${sub} needs --campaign <id>.`);
   }
 
@@ -582,6 +586,225 @@ async function runMarketing(
     await build.sendTest(await clientFor(), campaignId, email);
     out(`Test mail for campaign ${campaignId} sent to ${email}.`);
     return 0;
+  }
+
+
+  // ---- full API coverage: noun + verb -------------------------------------
+  const verbArg = positionals[flagString(flags, "campaign") ? 0 : 1];
+  const jsonBody = (): Record<string, unknown> => {
+    const raw = flagString(flags, "body");
+    if (!raw) throw new CliError(`cato marketing ${sub} needs --body '<json>'.`);
+    try { return JSON.parse(raw) as Record<string, unknown>; }
+    catch { throw new CliError("--body is not valid JSON."); }
+  };
+  const gateOrThrow = () => {
+    const g = resolveWriteGate(flags);
+    if (g.blockedReason) throw new CliError(g.blockedReason);
+    return g;
+  };
+  const show = (v: unknown) => out(JSON.stringify(v, null, 2));
+  const campaignUrl = () => marketingUrl(ctx.baseUrl ?? DEFAULT_BASE_URL, campaignId);
+
+  if (sub === "access") { show(await marketing.getAccess(client)); return 0; }
+  if (sub === "people") { show(await api.listPeopleOptions(client)); return 0; }
+  if (sub === "filter-options") { show(await api.listContactFilterOptions(client)); return 0; }
+  if (sub === "crm-picker") { show(await api.listCrmPicker(client)); return 0; }
+
+  if (sub === "assets") {
+    const verb = api.requireVerb("assets", verbArg, ["list", "create", "update"]);
+    if (verb === "list") { show(await api.listAssets(client)); return 0; }
+    const g = gateOrThrow();
+    const body = jsonBody();
+    if (verb === "create") {
+      const type = flagString(flags, "type");
+      if (!type) throw new CliError("cato marketing assets create needs --type <text>.");
+      if (g.dryRun) { out(api.renderWriteDryRun(`create ${type} asset`, [JSON.stringify(body)])); return 0; }
+      show(await api.createAsset(client, type, body)); return 0;
+    }
+    const assetId = flagString(flags, "asset");
+    if (!assetId) throw new CliError("cato marketing assets update needs --asset <uuid>.");
+    if (g.dryRun) { out(api.renderWriteDryRun("update asset", [assetId, JSON.stringify(body)])); return 0; }
+    show(await api.updateAsset(client, assetId, body)); return 0;
+  }
+
+  if (sub === "research") {
+    const verb = api.requireVerb("research", verbArg, ["status", "start", "stop", "target"]);
+    if (verb === "status") {
+      out(api.renderResearchProgress(api.summariseResearch(await api.listTargets(client, campaignId))));
+      out(`\nCampaign: ${campaignUrl()}`);
+      return 0;
+    }
+    const g = gateOrThrow();
+    if (verb === "target") {
+      const targetId = flagString(flags, "target");
+      if (!targetId) throw new CliError("cato marketing research target needs --target <uuid>.");
+      if (g.dryRun) { out(api.renderWriteDryRun("research", [`Target: ${targetId}`], 1)); return 0; }
+      show(await api.researchTarget(client, campaignId, targetId)); return 0;
+    }
+    if (verb === "stop") {
+      if (g.dryRun) { out(api.renderWriteDryRun("stop research", [`Campaign: ${campaignId}`])); return 0; }
+      show(await api.stopResearch(client, campaignId)); return 0;
+    }
+    const progress = api.summariseResearch(await api.listTargets(client, campaignId));
+    if (g.dryRun) {
+      out(api.renderWriteDryRun("start research", [
+        `Campaign: ${campaignId}`,
+        "Research calls an LLM per company and writes contact CANDIDATES, not members.",
+        "Nothing is mailed by this.",
+      ], progress.outstanding || progress.total));
+      return 0;
+    }
+    show(await api.startResearch(client, campaignId));
+    out(`\nStarted over ${progress.total} target(s). Follow with: cato marketing research status --campaign ${campaignId}`);
+    return 0;
+  }
+
+  if (sub === "candidates") {
+    const verb = api.requireVerb("candidates", verbArg, ["list", "attach", "remove", "attach-crm", "staged"]);
+    if (verb === "list") {
+      const rows = await api.listSelectionCandidates(client, campaignId);
+      out(render(rows, { json: ctx.json, csv: ctx.csv }));
+      if (!ctx.json && !ctx.csv) out(`\n${rows.length} candidate(s).`);
+      return 0;
+    }
+    if (verb === "staged") { show(await api.listContactCandidates(client, campaignId)); return 0; }
+    const g = gateOrThrow();
+    const ids = api.requireIds(flagString(flags, "ids"), verb === "attach-crm" ? "person" : "candidate");
+    if (g.dryRun) { out(api.renderWriteDryRun(verb, [`Campaign: ${campaignId}`, `Ids: ${ids.join(", ")}`], ids.length)); return 0; }
+    const result = verb === "attach" ? await api.attachCandidates(client, campaignId, ids)
+      : verb === "remove" ? await api.removeCandidates(client, campaignId, ids)
+      : await api.attachCrmContacts(client, campaignId, ids);
+    show(result); out(`\nCampaign: ${campaignUrl()}`); return 0;
+  }
+
+  if (sub === "members") {
+    const verb = api.requireVerb("members", verbArg,
+      ["list", "add", "bulk", "attach-matching", "remove", "stop", "mark-todo"]);
+    if (verb === "list") {
+      const rows = await api.listMembers(client, campaignId);
+      out(render(rows, { json: ctx.json, csv: ctx.csv }));
+      if (!ctx.json && !ctx.csv) out(`\n${rows.length} member(s).`);
+      return 0;
+    }
+    const g = gateOrThrow();
+    if (verb === "attach-matching") {
+      const filter = build.buildAudienceFilter({
+        sourceSystem: flagString(flags, "source-system"),
+        segment: flagString(flags, "segment"),
+        branche: flagString(flags, "branche"),
+      });
+      if (g.dryRun) { out(build.renderAudienceDryRun(filter, campaignId, "members")); return 0; }
+      show(await api.attachMatchingMembers(client, campaignId, filter)); return 0;
+    }
+    if (verb === "mark-todo") {
+      if (g.dryRun) { out(api.renderWriteDryRun("mark members as todo", [`Campaign: ${campaignId}`])); return 0; }
+      show(await api.markMembersAsTodo(client, campaignId)); return 0;
+    }
+    if (verb === "remove" || verb === "stop") {
+      const memberId = flagString(flags, "member");
+      if (!memberId) throw new CliError(`cato marketing members ${verb} needs --member <uuid>.`);
+      if (g.dryRun) { out(api.renderWriteDryRun(verb, [`Member: ${memberId}`], 1)); return 0; }
+      show(verb === "remove" ? await api.removeMember(client, campaignId, memberId)
+                             : await api.stopMember(client, campaignId, memberId));
+      return 0;
+    }
+    const ids = api.requireIds(flagString(flags, "ids"), "person");
+    if (g.dryRun) { out(api.renderWriteDryRun(verb, [`Campaign: ${campaignId}`, `People: ${ids.join(", ")}`], ids.length)); return 0; }
+    show(verb === "add" ? await api.attachPerson(client, campaignId, ids[0]!)
+                        : await api.bulkAttachMembers(client, campaignId, ids));
+    return 0;
+  }
+
+  if (sub === "targets") {
+    const verb = api.requireVerb("targets", verbArg, ["add-matching", "list", "add", "remove"]);
+    if (verb === "list") {
+      const rows = await api.listTargets(client, campaignId);
+      out(render(rows, { json: ctx.json, csv: ctx.csv }));
+      if (!ctx.json && !ctx.csv) out(`\n${rows.length} company target(s).`);
+      return 0;
+    }
+    const g = gateOrThrow();
+    if (verb === "remove") {
+      const targetId = flagString(flags, "target");
+      if (!targetId) throw new CliError("cato marketing targets remove needs --target <uuid>.");
+      if (g.dryRun) { out(api.renderWriteDryRun("remove target", [targetId], 1)); return 0; }
+      show(await api.removeTarget(client, campaignId, targetId)); return 0;
+    }
+    if (verb === "add") {
+      const ids = api.requireIds(flagString(flags, "ids"), "company");
+      if (g.dryRun) { out(api.renderWriteDryRun("add targets", [`Companies: ${ids.join(", ")}`], ids.length)); return 0; }
+      show(await api.addTargets(client, campaignId, ids)); return 0;
+    }
+    const filter = build.buildAudienceFilter({
+      sourceSystem: flagString(flags, "source-system"),
+      segment: flagString(flags, "segment"),
+      branche: flagString(flags, "branche"),
+    });
+    if (g.dryRun) { out(build.renderAudienceDryRun(filter, campaignId, "company-targets")); return 0; }
+    show(await api.addMatchingTargets(client, campaignId, filter));
+    out(`\nCampaign: ${campaignUrl()}`);
+    return 0;
+  }
+
+  if (sub === "prompts" || sub === "search-settings" || sub === "schedule") {
+    const verb = api.requireVerb(sub, verbArg, ["get", "set"]);
+    if (verb === "get") {
+      show(sub === "prompts" ? await api.getPrompts(client, campaignId)
+         : sub === "search-settings" ? await api.getSearchSettings(client, campaignId)
+         : await marketing.getSchedule(client, campaignId));
+      return 0;
+    }
+    const g = gateOrThrow();
+    const body = jsonBody();
+    if (g.dryRun) { out(api.renderWriteDryRun(`set ${sub}`, [`Campaign: ${campaignId}`, JSON.stringify(body)])); return 0; }
+    show(sub === "prompts" ? await api.setPrompts(client, campaignId, body)
+       : sub === "search-settings" ? await api.setSearchSettings(client, campaignId, body)
+       : await api.setSchedule(client, campaignId, body));
+    return 0;
+  }
+
+  if (sub === "update" || sub === "archive" || sub === "restore" || sub === "delete") {
+    const g = gateOrThrow();
+    if (sub === "update") {
+      const body = jsonBody();
+      if (g.dryRun) { out(api.renderWriteDryRun("update campaign", [campaignId, JSON.stringify(body)])); return 0; }
+      show(await api.updateCampaign(client, campaignId, body)); return 0;
+    }
+    if (g.dryRun) { out(api.renderWriteDryRun(`${sub} campaign`, [`Campaign: ${campaignId}`])); return 0; }
+    show(sub === "archive" ? await api.archiveCampaign(client, campaignId)
+       : sub === "restore" ? await api.restoreCampaign(client, campaignId)
+       : await api.deleteCampaign(client, campaignId));
+    return 0;
+  }
+
+  if (sub === "regenerate") {
+    const touchpointId = flagString(flags, "touchpoint") ?? positionals[0];
+    if (!touchpointId) throw new CliError("cato marketing regenerate needs --touchpoint <uuid>.");
+    const g = gateOrThrow();
+    if (g.dryRun) { out(api.renderWriteDryRun("regenerate draft", [`Touchpoint: ${touchpointId}`], 1)); return 0; }
+    show(await api.regenerateTouchpoint(client, touchpointId)); return 0;
+  }
+
+  if (sub === "bulk-approve") {
+    const g = gateOrThrow();
+    const queue = await marketing.listReviewQueue(client, campaignId);
+    const pending = marketing.filterReviewQueue(queue, "pending");
+    if (g.dryRun) {
+      out(api.renderWriteDryRun("bulk-approve", [
+        `Campaign: ${campaignId}`,
+        "Approving marks these drafts ready; the scheduler may then send them in the next window.",
+      ], pending.length));
+      return 0;
+    }
+    out(`Approving ${pending.length} pending draft(s) for campaign ${campaignId}.`);
+    show(await api.bulkApproveDrafts(client, campaignId));
+    return 0;
+  }
+
+  if (sub === "tracking-simulate") {
+    const g = gateOrThrow();
+    if (g.dryRun) { out(api.renderWriteDryRun("simulate tracking", [`Campaign: ${campaignId}`])); return 0; }
+    show(await api.simulateTracking(client, campaignId)); return 0;
   }
 
   throw new CliError(`Unknown marketing subcommand '${sub}'.`);

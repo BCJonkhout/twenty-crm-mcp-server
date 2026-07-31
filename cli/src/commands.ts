@@ -13,8 +13,15 @@ export const COMMAND_TREE: Record<string, readonly string[]> = {
   import: [],
   auth: ["create", "set", "list", "revoke", "status", "whoami", "roles"],
   marketing: [
-    "campaigns", "touchpoints", "dispatches", "events", "schedule", "approve", "reject", "send-now",
-    "create", "targets", "contacts", "generation", "enable", "send-test",
+    // read
+    "access", "campaigns", "touchpoints", "dispatches", "events", "schedule", "prompts",
+    "people", "filter-options", "crm-picker", "assets",
+    // build a campaign
+    "create", "update", "targets", "contacts", "members", "candidates", "research",
+    "search-settings", "generation", "enable", "archive", "restore", "delete",
+    // review and send
+    "approve", "reject", "regenerate", "bulk-approve", "send-test", "send-now",
+    "tracking-simulate",
   ],
 };
 
@@ -124,6 +131,12 @@ const MARKETING_FLAGS: FlagSpecs = {
   on: { type: "boolean", description: "Turn generation/enabled on (default for `generation`/`enable`)." },
   off: { type: "boolean", description: "Turn generation/enabled off." },
   email: { type: "string", placeholder: "<address>", description: "Recipient of a single test mail (send-test)." },
+  ids: { type: "string", placeholder: "<a,b,c>", description: "Comma-separated ids (candidates, members, companies, people)." },
+  target: { type: "string", placeholder: "<uuid>", description: "Company-target id." },
+  member: { type: "string", placeholder: "<uuid>", description: "Campaign member id." },
+  asset: { type: "string", placeholder: "<uuid>", description: "Asset id (assets update)." },
+  type: { type: "string", placeholder: "<text>", description: "Asset type (assets create)." },
+  body: { type: "string", placeholder: "<json>", description: "Raw JSON body for update/prompts/schedule/search-settings/assets." },
 };
 
 export function flagSpecsFor(command: readonly string[]): FlagSpecs {
@@ -167,6 +180,24 @@ export const COMMAND_SUMMARIES: Record<string, string> = {
   "marketing generation": "Turn AI draft generation on (default) or off (--off). Drafts still need approval.",
   "marketing enable": "Enable (default) or disable (--off) a campaign.",
   "marketing send-test": "Send ONE test mail to --email. The audience is never touched.",
+  "marketing access": "Show what the current credential may do in the marketing module.",
+  "marketing update": "Update campaign fields from --body <json>.",
+  "marketing members": "list | add | bulk | attach-matching | remove | stop | mark-todo",
+  "marketing candidates": "list | attach | remove | attach-crm | staged — the contact selection step.",
+  "marketing research": "start | stop | status | target — contact research over the campaign's companies.",
+  "marketing search-settings": "get | set — which job titles the research looks for.",
+  "marketing prompts": "get | set — the generation prompts of a campaign.",
+  "marketing schedule": "get | set — the weekly send windows.",
+  "marketing archive": "Archive a campaign.",
+  "marketing restore": "Restore an archived campaign.",
+  "marketing delete": "Delete a campaign. Needs --no-dry-run --yes.",
+  "marketing regenerate": "Regenerate the draft of ONE touchpoint.",
+  "marketing bulk-approve": "Approve every pending draft of a campaign. Shows the count first.",
+  "marketing people": "Contactable people as the marketing module sees them.",
+  "marketing filter-options": "Available contact filter options.",
+  "marketing crm-picker": "CRM picker options (companies/people for selection).",
+  "marketing assets": "list | create | update — templates, sender profiles, rule packs.",
+  "marketing tracking-simulate": "Simulate tracking events for a campaign (testing only).",
   "auth create": "Create an API key in CATO and print the token once. Needs --no-dry-run --yes.",
   "auth set": "Store a key/token in a local profile (~/.config/cato/credentials.json, 0600).",
   "auth list": "List API keys in the workspace (never the key material).",
@@ -178,7 +209,6 @@ export const COMMAND_SUMMARIES: Record<string, string> = {
   "marketing touchpoints": "Show the touchpoint review queue (--state pending|approved|rejected).",
   "marketing dispatches": "List dispatches for a campaign.",
   "marketing events": "Show tracking aggregates (opens/clicks/bounces/unsubscribes).",
-  "marketing schedule": "Show the weekly send windows of a campaign.",
   "marketing approve": "Approve ONE touchpoint. Needs --no-dry-run --yes.",
   "marketing reject": "Reject ONE touchpoint. Needs --no-dry-run --yes.",
   "marketing send-now": "Send all APPROVED touchpoints of a campaign now. Needs --no-dry-run --yes.",
