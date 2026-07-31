@@ -5,8 +5,8 @@ import type { FlagSpecs } from "./args.ts";
 import { BRANCHE_VALUES, OPPORTUNITY_STAGE_VALUES, PRODUCT_VALUES, SALES_STATUS_VALUES } from "./filters.ts";
 
 export const COMMAND_TREE: Record<string, readonly string[]> = {
-  people: ["list", "get", "search"],
-  companies: ["list", "get", "search"],
+  people: ["list", "get", "search", "create", "update", "delete"],
+  companies: ["list", "get", "search", "create", "update", "delete"],
   opportunities: ["list"],
   notes: ["list"],
   segments: ["build"],
@@ -95,6 +95,23 @@ const SEGMENT_FLAGS: FlagSpecs = {
   "wave-size": { type: "number", placeholder: "<n>", description: "Split the segment into waves of n recipients and label each row with its wave." },
 };
 
+const RECORD_WRITE_FLAGS: FlagSpecs = {
+  "first-name": { type: "string", placeholder: "<text>", description: "Person first name." },
+  "last-name": { type: "string", placeholder: "<text>", description: "Person last name." },
+  email: { type: "string", placeholder: "<address>", description: "Primary email." },
+  phone: { type: "string", placeholder: "<number>", description: "Primary phone." },
+  "job-title": { type: "string", placeholder: "<text>", description: "Job title." },
+  "linkedin-url": { type: "string", placeholder: "<url>", description: "LinkedIn profile URL." },
+  "company-id": { type: "string", placeholder: "<uuid>", description: "Link the person to this company." },
+  "assignee-id": { type: "string", placeholder: "<uuid>", description: "Owner. Defaults to the company's accountOwnerId." },
+  name: { type: "string", placeholder: "<text>", description: "Company name." },
+  domain: { type: "string", placeholder: "<host>", description: "Company domain." },
+  city: { type: "string", placeholder: "<text>", description: "City." },
+  employees: { type: "number", placeholder: "<n>", description: "Employee count." },
+  branche: { type: "string", placeholder: "<text>", description: "Branche." },
+  "account-owner-id": { type: "string", placeholder: "<uuid>", description: "Company account owner." },
+};
+
 const IMPORT_FLAGS: FlagSpecs = {
   csv: { type: "string", placeholder: "<path>", description: "CSV file to analyse." },
   object: { type: "string", placeholder: "<people|companies>", description: "Target object (default: people)." },
@@ -143,8 +160,10 @@ export function flagSpecsFor(command: readonly string[]): FlagSpecs {
   const [group, sub] = command;
   switch (group) {
     case "people":
+      if (sub === "create" || sub === "update" || sub === "delete") return RECORD_WRITE_FLAGS;
       return { ...COMMON_READ_FLAGS, ...PEOPLE_FILTER_FLAGS, ...(sub === "search" ? SEARCH_FLAGS : {}) };
     case "companies":
+      if (sub === "create" || sub === "update" || sub === "delete") return RECORD_WRITE_FLAGS;
       return { ...COMMON_READ_FLAGS, ...COMPANY_FILTER_FLAGS, ...(sub === "search" ? SEARCH_FLAGS : {}) };
     case "opportunities":
       return { ...COMMON_READ_FLAGS, ...OPPORTUNITY_FILTER_FLAGS };
@@ -174,6 +193,12 @@ export const COMMAND_SUMMARIES: Record<string, string> = {
   "notes list": "List notes.",
   "segments build": "Build a target-audience selection from filters and write it out as JSON/CSV.",
   import: "Analyse a CSV; with --source-system also tag/create companies. Needs --no-dry-run --yes.",
+  "people create": "Create a person. Inherits the company's account owner so the record stays visible.",
+  "people update": "Update a person by id. Only the fields you pass are written.",
+  "people delete": "Delete a person by id. Needs --no-dry-run --yes.",
+  "companies create": "Create a company. Needs --name.",
+  "companies update": "Update a company by id. Only the fields you pass are written.",
+  "companies delete": "Delete a company by id. Needs --no-dry-run --yes.",
   "marketing create": "Create a campaign. Starts disabled, generation off, no members. Sends nothing.",
   "marketing targets": "Attach companies as campaign targets from a provenance filter.",
   "marketing contacts": "Attach matching people as campaign members.",

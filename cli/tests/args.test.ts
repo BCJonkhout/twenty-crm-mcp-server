@@ -28,9 +28,9 @@ describe("parseArgs — command resolution", () => {
   });
 
   it("reports an unknown subcommand and names the valid ones", () => {
-    const r = parse(["people", "delete"]);
+    const r = parse(["people", "merge"]);
     expect(r.command).toEqual(["people"]);
-    expect(r.errors[0]).toContain("Unknown subcommand 'delete'");
+    expect(r.errors[0]).toContain("Unknown subcommand 'merge'");
     expect(r.errors[0]).toContain("list, get, search");
   });
 

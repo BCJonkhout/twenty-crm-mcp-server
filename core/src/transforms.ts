@@ -30,7 +30,12 @@ export interface BodyInput {
 export function transformPersonData(data: PersonInput): Record<string, unknown> {
   const t: Record<string, unknown> = { ...data };
   if (t.firstName || t.lastName) {
-    t.name = { firstName: (t.firstName as string | undefined) || "", lastName: (t.lastName as string | undefined) || "" };
+    // Only the halves that were actually supplied. Defaulting the other half to
+    // "" is harmless on a create but blanks the existing value on a PATCH.
+    const name: Record<string, string> = {};
+    if (t.firstName) name.firstName = t.firstName as string;
+    if (t.lastName) name.lastName = t.lastName as string;
+    t.name = name;
     delete t.firstName;
     delete t.lastName;
   }

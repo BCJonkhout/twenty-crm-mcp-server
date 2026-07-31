@@ -28,6 +28,7 @@ import * as auth from "./commands/auth.ts";
 import * as marketing from "./commands/marketing.ts";
 import * as build from "./commands/campaignBuild.ts";
 import * as api from "./commands/marketingApi.ts";
+import * as write from "./commands/recordWrite.ts";
 import { DEFAULT_BASE_URL, indexUrl, marketingUrl, recordUrl } from "./urls.ts";
 import { createGraphQLTransport, currentWorkspace } from "./auth-api.ts";
 
@@ -129,10 +130,62 @@ async function runRecordCommand(
   sub: string,
   positionals: string[],
   flags: Record<string, FlagValue>,
-  ctx: { json: boolean; csv: boolean },
+  ctx: { json: boolean; csv: boolean; baseUrl?: string },
 ): Promise<number> {
   const creds = await resolveAuth(flags);
   const client = restClient(creds);
+  const baseUrl = ctx.baseUrl ?? DEFAULT_BASE_URL;
+
+  if (sub === "create" || sub === "update" || sub === "delete") {
+    if (objectPath !== "people" && objectPath !== "companies") {
+      throw new CliError(`cato ${objectPath} ${sub} is not supported.`);
+    }
+    const gate = resolveWriteGate(flags);
+    if (gate.blockedReason) throw new CliError(gate.blockedReason);
+    const id = positionals[0];
+
+    if (sub === "delete") {
+      if (!id) throw new CliError(`cato ${objectPath} delete needs a record id.`);
+      if (gate.dryRun) { out(write.renderWriteDryRun("delete", objectPath, null, id)); return 0; }
+      out(JSON.stringify(await write.deleteRecord(client, objectPath, id), null, 2));
+      return 0;
+    }
+
+    const personFlags: write.PersonFlags = {
+      firstName: flagString(flags, "first-name"), lastName: flagString(flags, "last-name"),
+      email: flagString(flags, "email"), phone: flagString(flags, "phone"),
+      jobTitle: flagString(flags, "job-title"), linkedinUrl: flagString(flags, "linkedin-url"),
+      city: flagString(flags, "city"), companyId: flagString(flags, "company-id"),
+      assigneeId: flagString(flags, "assignee-id"),
+    };
+    const companyFlags: write.CompanyFlags = {
+      name: flagString(flags, "name"), domain: flagString(flags, "domain"),
+      city: flagString(flags, "city"), employees: flagNumber(flags, "employees"),
+      branche: flagString(flags, "branche"), accountOwnerId: flagString(flags, "account-owner-id"),
+    };
+
+    let inheritedFrom: string | undefined;
+    if (objectPath === "people") {
+      const resolved = await write.resolveAssignee(client, personFlags);
+      personFlags.assigneeId = resolved.assigneeId;
+      inheritedFrom = resolved.inheritedFrom;
+    }
+
+    if (sub === "create") write.requireCreateFields(objectPath, { ...personFlags, ...companyFlags });
+    else if (!id) throw new CliError(`cato ${objectPath} update needs a record id.`);
+
+    const body = objectPath === "people"
+      ? write.buildPersonBody(personFlags)
+      : write.buildCompanyBody(companyFlags);
+
+    if (gate.dryRun) { out(write.renderWriteDryRun(sub, objectPath, body, id, inheritedFrom)); return 0; }
+    const outcome = sub === "create"
+      ? await write.createRecord(client, objectPath, body, baseUrl)
+      : await write.updateRecord(client, objectPath, id!, body, baseUrl);
+    out(JSON.stringify(outcome, null, 2));
+    if (inheritedFrom) out(`Assignee inherited from company ${inheritedFrom}.`);
+    return 0;
+  }
 
   if (sub === "get") {
     const id = positionals[0];

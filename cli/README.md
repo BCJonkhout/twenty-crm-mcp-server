@@ -51,6 +51,21 @@ cato notes list
 cato segments build --json      # doelgroepselectie uit filters, als JSON of CSV
 ```
 
+## Schrijven in het CRM
+
+```sh
+cato people create --first-name Anne --last-name Jansen --email a@kantoor.nl --company-id <uuid>
+cato people update <id> --job-title "Partner"
+cato people delete <id> --no-dry-run --yes
+cato companies create --name "Nieuw Kantoor" --domain nieuwkantoor.nl
+cato companies update <id> --branche ADVOCATUUR
+```
+
+Alleen de velden die je meegeeft worden geschreven — een update met alleen een voornaam laat de
+achternaam staan. Bij `people create` met `--company-id` neemt de CLI automatisch de
+`accountOwnerId` van dat bedrijf over als eigenaar; zonder dat is de persoon onzichtbaar voor de
+Sales Rep die het account beheert. Met `--assignee-id` overrule je dat.
+
 ## Marketing
 
 CATO is geen standaard Twenty maar `prudai/twenty:v1.19.0-marketing`, met een eigen
