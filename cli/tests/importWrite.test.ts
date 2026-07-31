@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
-  buildPayload, buildTagPayload, executeWrites, matchKey, planWrites, renderWritePlan,
-  type ImportRow,
+  buildPayload, buildTagPayload, executeWrites, findNearDuplicates, matchKey, planWrites,
+  renderWritePlan, type ImportRow,
 } from "../src/commands/importWrite.ts";
 import { recordUrl } from "../src/urls.ts";
 
@@ -151,5 +151,43 @@ describe("renderWritePlan", () => {
     expect(text).toContain("DRY RUN — nothing was written to CATO.");
     expect(text).toContain("--no-dry-run --yes");
     expect(text).toContain("No email addresses");
+  });
+});
+
+describe("findNearDuplicates", () => {
+  const existing = [
+    { id: "1", name: "AKD advocaten & notarissen" },
+    { id: "2", name: "Anker & Anker Strafrechtadvocaten" },
+    { id: "3", name: "Hansen Architect" },
+    { id: "4", name: "Nysingh Advocaten - Notarissen N.V." },
+    { id: "5", name: "Handelsonderneming van Viegen B.V." },
+    { id: "6", name: "AKD" },
+  ];
+
+  // The exact case that put ten duplicate firms in the register: matchKey
+  // hashes "AKD" and "AKD advocaten & notarissen" differently.
+  it("flags a shorter name that an existing record extends", () => {
+    expect(findNearDuplicates("AKD", existing).map((e) => e.name))
+      .toContain("AKD advocaten & notarissen");
+    expect(findNearDuplicates("Nysingh", existing).map((e) => e.name))
+      .toContain("Nysingh Advocaten - Notarissen N.V.");
+  });
+
+  it("requires a word boundary, so HAN does not match Handelsonderneming", () => {
+    expect(findNearDuplicates("Han", existing)).toEqual([]);
+  });
+
+  it("does not report an exact name as a duplicate of itself", () => {
+    expect(findNearDuplicates("AKD", [{ id: "6", name: "AKD" }])).toEqual([]);
+  });
+
+  it("ignores names too short to be meaningful", () => {
+    expect(findNearDuplicates("AK", existing)).toEqual([]);
+  });
+
+  // It reports, it never decides: these two really are different organisations.
+  it("still reports genuinely different firms that share a prefix", () => {
+    expect(findNearDuplicates("Anker", existing)).toHaveLength(1);
+    expect(findNearDuplicates("Hansen", existing)).toHaveLength(1);
   });
 });

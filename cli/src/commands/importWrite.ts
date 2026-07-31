@@ -69,6 +69,31 @@ export interface ExistingCompany {
 }
 
 /**
+ * matchKey only unifies a fixed list of suffixes, so "AKD" and
+ * "AKD advocaten & notarissen" hash differently and both end up in the CRM.
+ * This catches that shape: an existing record whose name starts with the
+ * incoming one on a word boundary.
+ *
+ * It is a WARNING, never an automatic merge — "Anker" legitimately prefixes
+ * "Anker & Anker Strafrechtadvocaten" while being a different organisation.
+ * A person decides; the import only makes sure they are told.
+ */
+export function findNearDuplicates(
+  name: string,
+  existing: ExistingCompany[],
+): ExistingCompany[] {
+  const needle = name.trim().toLowerCase();
+  if (needle.length < 3) return [];
+  return existing.filter((e) => {
+    const other = e.name.trim().toLowerCase();
+    if (other === needle) return false;
+    if (!other.startsWith(needle)) return false;
+    const next = other.charAt(needle.length);
+    return next === "" || /[\s\-,.]/.test(next);
+  });
+}
+
+/**
  * Decides per row what should happen, given what CATO already holds.
  * Pure, so the plan can be shown and reviewed before anything is written.
  */
@@ -151,6 +176,7 @@ export function renderWritePlan(
   plan: ReturnType<typeof planWrites>,
   sourceSystem: string,
   json: boolean,
+  nearDuplicates: Array<{ incoming: string; existing: ExistingCompany[] }> = [],
 ): string {
   const creates = plan.filter((p) => p.action === "create");
   const tags = plan.filter((p) => p.action === "tag");
@@ -180,6 +206,16 @@ export function renderWritePlan(
   if (tags.length > 0) {
     lines.push("", "Examples of matches against existing records:");
     for (const t of tags.slice(0, 8)) lines.push(`  ${t.row.name}  ->  ${t.existingName}`);
+  }
+  if (nearDuplicates.length > 0) {
+    lines.push("",
+      `!! ${nearDuplicates.length} incoming name(s) look like an organisation that already exists`,
+      "   under a longer name. Creating them would duplicate the register. Check these",
+      "   before writing, and pass --allow-near-duplicates once you have:");
+    for (const d of nearDuplicates.slice(0, 15)) {
+      lines.push(`     ${d.incoming}  ~  ${d.existing.map((e) => e.name).join(" / ")}`);
+    }
+    if (nearDuplicates.length > 15) lines.push(`     … and ${nearDuplicates.length - 15} more`);
   }
   return lines.join("\n");
 }

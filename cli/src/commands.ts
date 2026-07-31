@@ -117,6 +117,7 @@ const IMPORT_FLAGS: FlagSpecs = {
   object: { type: "string", placeholder: "<people|companies>", description: "Target object (default: people)." },
   "match-on": { type: "string", placeholder: "<field>", description: "Field used to detect existing records (default: emails.primaryEmail)." },
   "source-system": { type: "string", placeholder: "<name>", description: "Tag companies with this provenance label. Enables the write path (companies only)." },
+  "allow-near-duplicates": { type: "boolean", description: "Proceed even though incoming names look like existing organisations. Check the dry run first." },
 };
 
 const AUTH_FLAGS: FlagSpecs = {

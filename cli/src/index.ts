@@ -22,7 +22,7 @@ import { fetchRecords, planList, runGet, runList, type ObjectPath } from "./comm
 import { buildSegment, renderSegment } from "./commands/segments.ts";
 import { parseCsv, planImport, renderImportPlan } from "./commands/importCsv.ts";
 import {
-  executeWrites, planWrites, renderWritePlan, type ImportRow,
+  executeWrites, findNearDuplicates, planWrites, renderWritePlan, type ImportRow,
 } from "./commands/importWrite.ts";
 import * as auth from "./commands/auth.ts";
 import * as marketing from "./commands/marketing.ts";
@@ -316,11 +316,28 @@ async function runImportTag(
     .filter((r) => r.id && r.name);
 
   const plan = planWrites(rows, existing);
+
+  // Names that an existing record extends ("AKD" vs "AKD advocaten &
+  // notarissen") hash differently and would silently duplicate the register.
+  const nearDuplicates = plan
+    .filter((p) => p.action === "create")
+    .map((p) => ({ incoming: p.row.name, existing: findNearDuplicates(p.row.name, existing) }))
+    .filter((d) => d.existing.length > 0);
+
   const gate = resolveWriteGate(flags);
   if (gate.blockedReason) throw new CliError(gate.blockedReason);
 
+  if (!gate.dryRun && nearDuplicates.length > 0 && flagBool(flags, "allow-near-duplicates") !== true) {
+    throw new CliError(
+      `Refusing to write: ${nearDuplicates.length} incoming name(s) look like an organisation that ` +
+      "already exists under a longer name, and creating them would duplicate the register.\n" +
+      nearDuplicates.slice(0, 10).map((d) => `  ${d.incoming}  ~  ${d.existing.map((e) => e.name).join(" / ")}`).join("\n") +
+      "\nRun the dry run to see them all, then pass --allow-near-duplicates once you have checked.",
+    );
+  }
+
   if (gate.dryRun) {
-    out(renderWritePlan(plan, sourceSystem, ctx.json));
+    out(renderWritePlan(plan, sourceSystem, ctx.json, nearDuplicates));
     out(`\nMatched against ${existing.length} companies already in CATO.`);
     out(`List afterwards: ${indexUrl(baseUrl, "companies")}`);
     return 0;
