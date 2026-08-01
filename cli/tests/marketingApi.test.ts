@@ -2,7 +2,8 @@ import { describe, expect, it } from "bun:test";
 import {
   addTargets, archiveCampaign, attachCandidates, bulkApproveDrafts, deleteCampaign,
   MarketingVerbError, removeMember, renderResearchProgress, renderWriteDryRun, requireIds,
-  requireVerb, setSchedule, startResearch, stopResearch, summariseResearch, updateCampaign,
+  renderPersonHistory, requireVerb, setSchedule, startResearch, stopResearch, summariseResearch,
+  updateCampaign,
 } from "../src/commands/marketingApi.ts";
 
 function mockClient(response: unknown = {}) {
@@ -138,5 +139,46 @@ describe("renderWriteDryRun", () => {
     expect(text).toContain("DRY RUN — bulk-approve was not performed.");
     expect(text).toContain("Records affected: 42");
     expect(text).toContain("--no-dry-run --yes");
+  });
+});
+
+describe("renderPersonHistory", () => {
+  const base = { personId: "p-1", memberships: [], messages: [],
+    totals: { campaigns: 0, sent: 0, opens: 0, clicks: 0, bounces: 0, unsubscribes: 0 } };
+
+  it("says plainly when nobody has mailed this person", () => {
+    expect(renderPersonHistory(base)).toContain("No mail has been sent to this person.");
+  });
+
+  it("lists each mail with its phase and subject", () => {
+    const text = renderPersonHistory({
+      ...base,
+      messages: [{ sentAt: "2026-07-07T10:00:00Z", phase: "email_2", subject: "Twentse AI", opens: 3, clicks: 1 }],
+      totals: { ...base.totals, sent: 1, opens: 3, clicks: 1 },
+    });
+    expect(text).toContain("2026-07-07");
+    expect(text).toContain("email_2");
+    expect(text).toContain("Twentse AI");
+    expect(text).toContain("3x open, 1x click");
+  });
+
+  it("marks a bounced mail rather than showing it as ordinary", () => {
+    const text = renderPersonHistory({
+      ...base,
+      messages: [{ sentAt: "2026-07-07", subject: "X", opens: 0, clicks: 0, bounced: true }],
+      totals: { ...base.totals, sent: 1, bounces: 1 },
+    });
+    expect(text).toContain("BOUNCED");
+  });
+
+  // The one signal that must never be missed in a list of numbers.
+  it("spells out an unsubscribe as an instruction, not a count", () => {
+    const text = renderPersonHistory({ ...base, totals: { ...base.totals, unsubscribes: 1 } });
+    expect(text).toContain("has unsubscribed");
+    expect(text).toContain("Do not include them in a campaign");
+  });
+
+  it("stays silent about unsubscribing when there is none", () => {
+    expect(renderPersonHistory(base)).not.toContain("unsubscribed");
   });
 });

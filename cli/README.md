@@ -66,6 +66,16 @@ achternaam staan. Bij `people create` met `--company-id` neemt de CLI automatisc
 `accountOwnerId` van dat bedrijf over als eigenaar; zonder dat is de persoon onzichtbaar voor de
 Sales Rep die het account beheert. Met `--assignee-id` overrule je dat.
 
+## Wat is er naar deze persoon gestuurd?
+
+```sh
+cato people history <persoon-id>
+```
+
+Toont de campagnes waar iemand in zit en elke mail die we hem stuurden — datum, fase, onderwerp,
+plus opens en clicks per bericht. Een bounce wordt als zodanig gemarkeerd en een uitschrijving
+levert een expliciete waarschuwing op, ook als er verder niets te tonen valt.
+
 ## Marketing
 
 CATO is geen standaard Twenty maar `prudai/twenty:v1.19.0-marketing`, met een eigen

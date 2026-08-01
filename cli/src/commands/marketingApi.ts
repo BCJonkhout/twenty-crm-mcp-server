@@ -151,6 +151,56 @@ export const regenerateTouchpoint = (client: RestClient, touchpointId: string) =
 export const bulkApproveDrafts = (client: RestClient, id: string, body: Record<string, unknown> = {}) =>
   post(client, `${c(id)}/drafts/bulk-approve`, body);
 
+// ---------------------------------------------------------------- person history
+export interface PersonHistory {
+  personId: string;
+  memberships: Array<Record<string, unknown>>;
+  messages: Array<Record<string, unknown>>;
+  totals: { campaigns: number; sent: number; opens: number; clicks: number; bounces: number; unsubscribes: number };
+}
+
+export const getPersonHistory = (client: RestClient, personId: string) =>
+  client.request<PersonHistory>(`${MARKETING_BASE}/people/${personId}/history`);
+
+export function renderPersonHistory(h: PersonHistory): string {
+  const t = h.totals;
+  const lines = [
+    `Campaigns : ${t.campaigns}`,
+    `Sent      : ${t.sent}`,
+    `Opens     : ${t.opens}   Clicks: ${t.clicks}   Bounces: ${t.bounces}   Unsubscribes: ${t.unsubscribes}`,
+  ];
+
+  if (h.memberships.length > 0) {
+    lines.push("", "Member of:");
+    for (const m of h.memberships) {
+      lines.push(`  ${String(m.campaignName ?? "?")}  (${String(m.memberState ?? "-")})`);
+    }
+  }
+
+  // The unsubscribe warning comes before the early return: it is the one signal
+  // that must never be missed, and it must not depend on there being rows to
+  // print underneath it.
+  const unsubscribed = t.unsubscribes > 0
+    ? ["", "!! This person has unsubscribed. Do not include them in a campaign."]
+    : [];
+
+  if (h.messages.length === 0) {
+    lines.push("", "No mail has been sent to this person.", ...unsubscribed);
+    return lines.join("\n");
+  }
+
+  lines.push("", "Mail sent:");
+  for (const m of h.messages) {
+    const when = String(m.sentAt ?? "").slice(0, 10);
+    const engagement = Number(m.opens ?? 0) > 0 || Number(m.clicks ?? 0) > 0
+      ? `  ${m.opens}x open, ${m.clicks}x click`
+      : m.bounced ? "  BOUNCED" : "";
+    lines.push(`  ${when}  ${String(m.phase ?? "")}  "${String(m.subject ?? "")}"${engagement}`);
+  }
+  lines.push(...unsubscribed);
+  return lines.join("\n");
+}
+
 // ---------------------------------------------------------------- lookups
 export const listPeopleOptions = (client: RestClient) =>
   client.request<Array<Record<string, unknown>>>(`${MARKETING_BASE}/people`);

@@ -5,7 +5,7 @@ import type { FlagSpecs } from "./args.ts";
 import { BRANCHE_VALUES, OPPORTUNITY_STAGE_VALUES, PRODUCT_VALUES, SALES_STATUS_VALUES } from "./filters.ts";
 
 export const COMMAND_TREE: Record<string, readonly string[]> = {
-  people: ["list", "get", "search", "create", "update", "delete"],
+  people: ["list", "get", "search", "create", "update", "delete", "history"],
   companies: ["list", "get", "search", "create", "update", "delete"],
   opportunities: ["list"],
   notes: ["list"],
@@ -161,6 +161,7 @@ export function flagSpecsFor(command: readonly string[]): FlagSpecs {
   const [group, sub] = command;
   switch (group) {
     case "people":
+      if (sub === "history") return {};
       if (sub === "create" || sub === "update" || sub === "delete") return RECORD_WRITE_FLAGS;
       return { ...COMMON_READ_FLAGS, ...PEOPLE_FILTER_FLAGS, ...(sub === "search" ? SEARCH_FLAGS : {}) };
     case "companies":
@@ -197,6 +198,7 @@ export const COMMAND_SUMMARIES: Record<string, string> = {
   "people create": "Create a person. Inherits the company's account owner so the record stays visible.",
   "people update": "Update a person by id. Only the fields you pass are written.",
   "people delete": "Delete a person by id. Needs --no-dry-run --yes.",
+  "people history": "Campaigns this person is in and every mail we sent them, with opens and clicks.",
   "companies create": "Create a company. Needs --name.",
   "companies update": "Update a company by id. Only the fields you pass are written.",
   "companies delete": "Delete a company by id. Needs --no-dry-run --yes.",

@@ -187,6 +187,17 @@ async function runRecordCommand(
     return 0;
   }
 
+  if (sub === "history") {
+    const id = positionals[0];
+    if (!id) throw new CliError("cato people history needs a person id.");
+    const creds2 = await resolveAuth(flags);
+    const token = marketing.assertMarketingAuth(creds2.userToken, creds2.apiKey);
+    const history = await api.getPersonHistory(restClient(creds2, token), id);
+    out(ctx.json ? JSON.stringify(history, null, 2) : api.renderPersonHistory(history));
+    if (!ctx.json) out(`\n${recordUrl(baseUrl, "person", id)}`);
+    return 0;
+  }
+
   if (sub === "get") {
     const id = positionals[0];
     if (!id) throw new CliError(`cato ${objectPath} get needs a record id as its argument.`);
