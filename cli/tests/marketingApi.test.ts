@@ -182,3 +182,36 @@ describe("renderPersonHistory", () => {
     expect(renderPersonHistory(base)).not.toContain("unsubscribed");
   });
 });
+
+// A second `if (sub === "targets")` earlier in the dispatcher shadowed the full
+// list/add/remove branch, so `targets add --ids …` silently fell through to the
+// filter-based variant and refused. Nothing in the types catches a duplicate
+// branch; only the command surface does.
+describe("dispatcher branches are unique", () => {
+  const source = require("fs").readFileSync(
+    require("path").join(import.meta.dir, "../src/index.ts"), "utf8",
+  ) as string;
+
+  // Scoped to runMarketing: `create` legitimately appears in the people,
+  // companies and auth dispatchers too.
+  const runMarketing = source.slice(
+    source.indexOf("async function runMarketing("),
+    source.indexOf("const code = await main("),
+  );
+
+  it("handles each marketing subcommand in exactly one place", () => {
+    const seen = new Map<string, number>();
+    // Alleen takken op het hoogste niveau (2 spaties); een geneste
+    // `if (sub === "approve")` binnen een tak is legitiem.
+    for (const m of runMarketing.matchAll(/^  if \(sub === "([a-z-]+)"/gm)) {
+      seen.set(m[1]!, (seen.get(m[1]!) ?? 0) + 1);
+    }
+    const duplicated = [...seen.entries()].filter(([, n]) => n > 1).map(([s]) => s);
+    expect(duplicated).toEqual([]);
+  });
+
+  it("looks at a real dispatcher, not an empty slice", () => {
+    expect(runMarketing).toContain('sub === "targets"');
+    expect(runMarketing.length).toBeGreaterThan(2000);
+  });
+});

@@ -18,7 +18,7 @@ export const COMMAND_TREE: Record<string, readonly string[]> = {
     "people", "filter-options", "crm-picker", "assets",
     // build a campaign
     "create", "update", "targets", "contacts", "members", "candidates", "research",
-    "search-settings", "generation", "enable", "archive", "restore", "delete",
+    "search-settings", "generation", "enable", "archive", "restore", "delete", "verify",
     // review and send
     "approve", "reject", "regenerate", "bulk-approve", "send-test", "send-now",
     "tracking-simulate",
@@ -213,6 +213,7 @@ export const COMMAND_SUMMARIES: Record<string, string> = {
   "marketing members": "list | add | bulk | attach-matching | remove | stop | mark-todo",
   "marketing candidates": "list | attach | remove | attach-crm | staged — the contact selection step.",
   "marketing research": "start | stop | status | target — contact research over the campaign's companies.",
+  "marketing verify": "Acceptance check on a research run: deliverability, domain agreement, coverage.",
   "marketing search-settings": "get | set — which job titles the research looks for.",
   "marketing prompts": "get | set — the generation prompts of a campaign.",
   "marketing schedule": "get | set — the weekly send windows.",

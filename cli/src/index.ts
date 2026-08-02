@@ -29,6 +29,7 @@ import * as marketing from "./commands/marketing.ts";
 import * as build from "./commands/campaignBuild.ts";
 import * as api from "./commands/marketingApi.ts";
 import * as write from "./commands/recordWrite.ts";
+import * as verify from "./commands/researchVerify.ts";
 import { DEFAULT_BASE_URL, indexUrl, marketingUrl, recordUrl } from "./urls.ts";
 import { createGraphQLTransport, currentWorkspace } from "./auth-api.ts";
 
@@ -608,8 +609,9 @@ async function runMarketing(
     return 0;
   }
 
-  if (sub === "targets" || sub === "contacts") {
-    if (!campaignId) throw new CliError(`cato marketing ${sub} needs --campaign <id>.`);
+  // `contacts` is de korte vorm van `members attach-matching`; `targets` wordt
+  // verderop afgehandeld met zijn volledige list/add/add-matching/remove.
+  if (sub === "contacts") {
     const filter = build.buildAudienceFilter({
       sourceSystem: flagString(flags, "source-system"),
       segment: flagString(flags, "segment"),
@@ -618,14 +620,10 @@ async function runMarketing(
     const gate = resolveWriteGate(flags);
     if (gate.blockedReason) throw new CliError(gate.blockedReason);
     if (gate.dryRun) {
-      out(build.renderAudienceDryRun(filter, campaignId, sub === "targets" ? "company-targets" : "members"));
+      out(build.renderAudienceDryRun(filter, campaignId, "members"));
       return 0;
     }
-    const authed = await clientFor();
-    const result = sub === "targets"
-      ? await build.addMatchingCompanyTargets(authed, campaignId, filter)
-      : await build.attachMatchingMembers(authed, campaignId, filter);
-    out(JSON.stringify(result, null, 2));
+    out(JSON.stringify(await api.attachMatchingMembers(await clientFor(), campaignId, filter), null, 2));
     out(`\nCampaign: ${marketingUrl(ctx.baseUrl ?? DEFAULT_BASE_URL, campaignId)}`);
     return 0;
   }
@@ -738,6 +736,44 @@ async function runMarketing(
     show(await api.startResearch(client, campaignId));
     out(`\nStarted over ${progress.total} target(s). Follow with: cato marketing research status --campaign ${campaignId}`);
     return 0;
+  }
+
+  if (sub === "verify") {
+    const [rawCandidates, targets, campaign] = await Promise.all([
+      api.listSelectionCandidates(client, campaignId),
+      api.listTargets(client, campaignId),
+      marketing.getCampaign(client, campaignId),
+    ]);
+
+    const candidates: verify.ResearchCandidate[] = rawCandidates.map((c) => ({
+      companyId: String(c.companyId ?? ""),
+      companyName: String(c.companyName ?? c.company ?? "?"),
+      companyDomain: (c.companyDomain ?? c.domainName ?? null) as string | null,
+      displayName: String(c.displayName ?? "?"),
+      jobTitle: (c.jobTitle ?? null) as string | null,
+      primaryEmail: (c.primaryEmail ?? null) as string | null,
+      sourceUrl: (c.sourceUrl ?? null) as string | null,
+      validationWarnings: (c.validationWarnings ?? null) as unknown[] | null,
+    }));
+
+    const domains = candidates
+      .map((c) => verify.emailDomain(c.primaryEmail))
+      .filter((d): d is string => d !== null);
+    const { undeliverable } = await verify.checkDeliverability(domains);
+
+    const assessment = verify.assessAcceptance({
+      candidates,
+      targets: targets.map((t) => ({
+        companyId: String(t.companyId ?? ""),
+        companyName: String(t.companyName ?? "?"),
+        status: String(t.status ?? "unknown"),
+      })),
+      maxPerCompany: Number((campaign as Record<string, unknown>).maxTitleCandidatesPerCompany ?? 4),
+      undeliverableDomains: undeliverable,
+    });
+
+    out(ctx.json ? JSON.stringify(assessment, null, 2) : verify.renderAcceptance(assessment));
+    return assessment.verdict === "do-not-send" ? 1 : 0;
   }
 
   if (sub === "candidates") {

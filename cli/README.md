@@ -110,6 +110,27 @@ cato marketing bulk-approve --campaign <id>              # toont eerst hoeveel
 cato marketing people | filter-options | crm-picker      # opzoeklijsten
 ```
 
+### Controleren of een onderzoeksrun deugt
+
+```sh
+cato marketing verify --campaign <id>
+```
+
+Meet wat eerlijk te meten valt: kan het adres mail ontvangen (MX), citeert het model de
+**eigen site** van het kantoor of een leadverzamelaar, hoeveel kantoren leverden iets op, en
+zijn er meer kandidaten dan de run mocht produceren. Eindigt met `USABLE`, `REVIEW` of
+`DO NOT SEND` (afsluitcode 1).
+
+Belangrijker dan het oordeel is de sectie **COULD NOT BE JUDGED**: controles die niet konden
+draaien worden apart benoemd, zodat een groen oordeel nooit voor bewijs wordt aangezien. Dat
+is geen theorie — de eerste versie van deze controle meldde `USABLE` terwijl zijn
+domeinvergelijking stilletjes niets te vergelijken had.
+
+Wat het **niet** doet: vaststellen of de personen bestaan. Namen toetsen door websites te
+crawlen is gemeten en onbetrouwbaar bevonden (jongbloed.tv laadde niet eens). Wat wél is
+gemeten op 2026-08-02: van de 95 controleerbare kandidaten stond 87 daadwerkelijk op de
+pagina die het model citeerde. Behandel elke kandidaat als voorstel voor de selectiestap.
+
 ### Een campagne opzetten
 
 De volledige keten, in werkvolgorde. Elke stap is dry-run tenzij je `--no-dry-run --yes` toevoegt:
