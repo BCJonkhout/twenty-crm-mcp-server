@@ -759,7 +759,7 @@ async function runMarketing(
     const domains = candidates
       .map((c) => verify.emailDomain(c.primaryEmail))
       .filter((d): d is string => d !== null);
-    const { undeliverable } = await verify.checkDeliverability(domains);
+    const { undeliverable, unresolved } = await verify.checkDeliverability(domains);
 
     const assessment = verify.assessAcceptance({
       candidates,
@@ -770,6 +770,7 @@ async function runMarketing(
       })),
       maxPerCompany: Number((campaign as Record<string, unknown>).maxTitleCandidatesPerCompany ?? 4),
       undeliverableDomains: undeliverable,
+      unresolvedDomains: unresolved,
     });
 
     out(ctx.json ? JSON.stringify(assessment, null, 2) : verify.renderAcceptance(assessment));

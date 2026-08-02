@@ -93,13 +93,48 @@ describe("checkDeliverability", () => {
     const result = await checkDeliverability(
       ["goed.nl", "leeg.nl", "stuk.nl"],
       async (d) => {
-        if (d === "stuk.nl") throw new Error("ENOTFOUND");
+        // Node puts the reason on err.code, not in the message.
+        if (d === "stuk.nl") throw Object.assign(new Error("q"), { code: "ENOTFOUND" });
         return d === "leeg.nl" ? [] : [{ exchange: "mx" }];
       },
     );
 
     expect(result.deliverable).toEqual(["goed.nl"]);
     expect(result.undeliverable).toEqual(["leeg.nl", "stuk.nl"]);
+    expect(result.unresolved).toEqual([]);
+  });
+
+  // A blocker that appears on one run and is gone the next teaches everyone to
+  // ignore the check. thegdst.org did exactly that between two identical runs.
+  it("separates 'no mailserver' from 'the lookup did not answer'", async () => {
+    const fail = (code: string) => Object.assign(new Error(code), { code });
+    const result = await checkDeliverability(["weg.nl", "traag.nl"], async (d) => {
+      throw d === "weg.nl" ? fail("ENOTFOUND") : fail("ETIMEOUT");
+    });
+
+    expect(result.undeliverable).toEqual(["weg.nl"]);
+    expect(result.unresolved).toEqual(["traag.nl"]);
+  });
+
+  it("retries once before calling a lookup unresolved", async () => {
+    let calls = 0;
+    const result = await checkDeliverability(["flaky.nl"], async () => {
+      if (++calls === 1) throw Object.assign(new Error("ETIMEOUT"), { code: "ETIMEOUT" });
+      return [{ exchange: "mx" }];
+    });
+
+    expect(calls).toBe(2);
+    expect(result.deliverable).toEqual(["flaky.nl"]);
+  });
+
+  it("does not retry a conclusive answer", async () => {
+    let calls = 0;
+    await checkDeliverability(["weg.nl"], async () => {
+      calls++;
+      throw Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" });
+    });
+
+    expect(calls).toBe(1);
   });
 
   it("looks each domain up once, however many candidates share it", async () => {
@@ -207,6 +242,25 @@ describe("assessCitation", () => {
       .toBe("search-redirect");
   });
 
+  // Jongbloed publishes on jongbloedfiscaaljuristen.nl but mails from
+  // jongbloed.tv. Comparing the citation against the email domain alone marked
+  // their own team pages — the control case we trust most — as third-party.
+  it("accepts the firm's own site when its website domain differs from its mail domain", () => {
+    expect(assessCitation(candidate({
+      companyDomain: "https://www.jongbloedfiscaaljuristen.nl",
+      primaryEmail: "d.jongbloed@jongbloed.tv",
+      sourceUrl: "https://www.jongbloedfiscaaljuristen.nl/onze-mensen/dennis-jongbloed/",
+    }))).toBe("own-site");
+  });
+
+  it("still calls a lead database third-party when neither domain matches", () => {
+    expect(assessCitation(candidate({
+      companyDomain: "https://www.jongbloedfiscaaljuristen.nl",
+      primaryEmail: "d.jongbloed@jongbloed.tv",
+      sourceUrl: "https://getprospect.com/company/jongbloed",
+    }))).toBe("third-party");
+  });
+
   it("reports a missing citation as none", () => {
     expect(assessCitation(cited(null))).toBe("none");
     expect(assessCitation(cited("   "))).toBe("none");
@@ -227,6 +281,17 @@ describe("honesty about what could not be judged", () => {
 
     expect(a.notEvaluated.join(" ")).toContain("no candidate carried a company domain");
     expect(renderAcceptance(a)).toContain("COULD NOT BE JUDGED");
+  });
+
+  it("reports an unanswered MX lookup as unjudged, never as a blocker", () => {
+    const a = assessAcceptance({
+      targets, maxPerCompany: 4, undeliverableDomains: [], unresolvedDomains: ["traag.nl"],
+      candidates: [candidate({ companyDomain: "kantoor.nl", sourceUrl: "https://kantoor.nl/team" })],
+    });
+
+    expect(a.verdict).toBe("usable");
+    expect(a.findings.some((f) => f.severity === "blocker")).toBe(false);
+    expect(a.notEvaluated.join(" ")).toContain("timed out");
   });
 
   it("says how many citations point at an unresolvable redirect", () => {

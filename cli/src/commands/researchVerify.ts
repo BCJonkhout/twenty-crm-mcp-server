@@ -44,11 +44,17 @@ export function assessCitation(candidate: ResearchCandidate): CitationQuality {
   if (SEARCH_REDIRECT.test(url)) return "search-redirect";
 
   const host = normaliseDomain(url.replace(/^https?:\/\//, ""));
-  const mail = emailDomain(candidate.primaryEmail);
-  if (!host || !mail) return "third-party";
+  if (!host) return "third-party";
 
-  const sameOrg =
-    host === mail || host.endsWith(`.${mail}`) || mail.endsWith(`.${host}`);
+  // A firm's website and its mail domain are often not the same string —
+  // Jongbloed publishes on jongbloedfiscaaljuristen.nl and mails from
+  // jongbloed.tv. Comparing against the email domain alone marked their own
+  // team pages as third-party. Either domain counts as the firm itself.
+  const own = [emailDomain(candidate.primaryEmail), normaliseDomain(candidate.companyDomain)]
+    .filter((d): d is string => Boolean(d));
+  if (own.length === 0) return "third-party";
+
+  const sameOrg = own.some((d) => host === d || host.endsWith(`.${d}`) || d.endsWith(`.${host}`));
   return sameOrg ? "own-site" : "third-party";
 }
 
@@ -145,23 +151,44 @@ export function assessCoverage(
 }
 
 /** MX lookup per unique domain. A domain that cannot receive mail is a blocker. */
+/**
+ * DNS answers three ways, and collapsing them to two produces a blocker that
+ * comes and goes. NXDOMAIN/NODATA is the resolver stating there is no
+ * mailserver; a timeout or SERVFAIL states nothing at all. Only the first is
+ * grounds for refusing to send — the second belongs in "could not be judged",
+ * or the check reports DO NOT SEND on a network hiccup and is then rightly
+ * ignored the next time it says it.
+ */
+const CONCLUSIVE_DNS_ERRORS = new Set(["ENOTFOUND", "ENODATA", "NXDOMAIN"]);
+
 export async function checkDeliverability(
   domains: string[],
   resolve: (d: string) => Promise<unknown[]> = (d) => dns.resolveMx(d),
-): Promise<{ deliverable: string[]; undeliverable: string[] }> {
+): Promise<{ deliverable: string[]; undeliverable: string[]; unresolved: string[] }> {
   const deliverable: string[] = [];
   const undeliverable: string[] = [];
+  const unresolved: string[] = [];
   await Promise.all(
     [...new Set(domains)].map(async (domain) => {
-      try {
-        const records = await resolve(domain);
-        (records && records.length > 0 ? deliverable : undeliverable).push(domain);
-      } catch {
-        undeliverable.push(domain);
+      // One retry, because a single UDP timeout is not evidence of anything.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const records = await resolve(domain);
+          (records && records.length > 0 ? deliverable : undeliverable).push(domain);
+          return;
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException)?.code ?? "";
+          if (CONCLUSIVE_DNS_ERRORS.has(code)) return void undeliverable.push(domain);
+          if (attempt >= 1) return void unresolved.push(domain);
+        }
       }
     }),
   );
-  return { deliverable: deliverable.sort(), undeliverable: undeliverable.sort() };
+  return {
+    deliverable: deliverable.sort(),
+    undeliverable: undeliverable.sort(),
+    unresolved: unresolved.sort(),
+  };
 }
 
 export interface AcceptanceInput {
@@ -169,6 +196,8 @@ export interface AcceptanceInput {
   targets: CompanyTargetSummary[];
   maxPerCompany: number;
   undeliverableDomains: string[];
+  /** Domains whose MX lookup gave no answer either way — never a blocker. */
+  unresolvedDomains?: string[];
 }
 
 export interface Acceptance {
@@ -184,6 +213,7 @@ export interface Acceptance {
 
 export function assessAcceptance(input: AcceptanceInput): Acceptance {
   const { candidates, targets, maxPerCompany, undeliverableDomains } = input;
+  const unresolvedDomains = input.unresolvedDomains ?? [];
   const findings: Finding[] = [];
 
   const badSyntax = candidates.filter((c) => !hasValidSyntax(c.primaryEmail));
@@ -293,6 +323,11 @@ export function assessAcceptance(input: AcceptanceInput): Acceptance {
   if (withCompanyDomain === 0 && candidates.length > 0) {
     notEvaluated.push(
       "email domain vs company domain — no candidate carried a company domain to compare against",
+    );
+  }
+  if (unresolvedDomains.length > 0) {
+    notEvaluated.push(
+      `deliverability of ${unresolvedDomains.length} domain(s) — the MX lookup timed out rather than answering: ${unresolvedDomains.slice(0, 5).join(", ")}`,
     );
   }
   if (citations["search-redirect"] > 0) {
