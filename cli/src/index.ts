@@ -208,7 +208,9 @@ async function runRecordCommand(
 
   if (sub === "search") {
     const query = flagString(flags, "query") ?? positionals[0];
-    if (!query) throw new CliError(`cato ${objectPath} search needs a search term.`);
+    // Whitespace-only counts as missing: a blank term builds no search clause,
+    // and the command would quietly list the whole table instead of searching.
+    if (!query?.trim()) throw new CliError(`cato ${objectPath} search needs a search term.`);
     out(await runList(client, objectPath, { ...flags, query }, ctx));
     return 0;
   }

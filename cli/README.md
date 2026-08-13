@@ -44,7 +44,7 @@ Volgorde van herkomst: `--profile` > `$CATO_API_KEY` > profielbestand.
 
 ```sh
 cato people list --limit 50 --json
-cato people search "advocaat" --csv > advocaten.csv
+cato people search "advocaat" --csv > advocaten.csv   # matcht op naam, e-mail, telefoon én functietitel
 cato companies list --json
 cato opportunities list
 cato notes list

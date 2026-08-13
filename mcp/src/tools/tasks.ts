@@ -55,7 +55,7 @@ export const definitions: Tool[] = [
         offset: { type: "number" },
         starting_after: { type: "string" },
         ending_before: { type: "string" },
-        search: { type: "string" },
+        search: { type: "string", description: "Case-insensitive substring match on the task title. AND-ed with filter." },
         status: { type: "string", enum: ["TODO", "IN_PROGRESS", "DONE"], description: "Shortcut: equivalent to filter: status[eq]:<value>." },
         assigneeId: { type: "string", description: "Shortcut: equivalent to filter: assigneeId[eq]:<id>." },
         include_deleted: { type: "boolean" },

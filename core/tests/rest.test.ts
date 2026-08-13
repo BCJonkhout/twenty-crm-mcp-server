@@ -163,14 +163,24 @@ describe("createRestClient retry behaviour", () => {
 });
 
 describe("buildListQuery — no search param", () => {
-  it("never emits a search= param, whatever it is handed", () => {
+  it("drops a search value on the floor instead of putting it on the wire", () => {
     // Twenty's /rest/{object} endpoint has no full-text search and silently
     // drops query params it does not know. Emitting search= therefore looked
     // like a filtered request and returned the entire table. Free-text search
     // belongs in the filter (searchExpr), so this must stay absent.
-    const qs = buildListQuery({ filter: 'name[ilike]:"%acme%"', limit: 5 });
-    expect(qs).not.toContain("search=");
-    expect(qs).toContain("filter=");
+    //
+    // The cast is the point of the test: `search` is not in ListQueryParams,
+    // and a caller reaching for it anyway (as five MCP tools used to) must not
+    // get it onto the URL. Without actually passing a value here the assertion
+    // would be trivially true and would not catch the param coming back.
+    const qs = buildListQuery({
+      filter: 'name[ilike]:"%acme%"',
+      limit: 5,
+      search: "should-not-appear",
+    } as unknown as Parameters<typeof buildListQuery>[0]);
+    // Exact match, so an extra param of any name or encoding fails this.
+    expect(qs).toBe(`?filter=${encodeURIComponent('name[ilike]:"%acme%"')}&limit=5`);
+    expect(qs).not.toContain("should-not-appear");
   });
 
   it("still emits the params the server does honour", () => {

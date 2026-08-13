@@ -173,7 +173,10 @@ export interface ListQueryParams {
   after?: string | null;
   before?: string | null;
   extraParams?: Record<string, unknown>;
-  /** Caller-side flag — `iterRecords` reads it but `buildListQuery` ignores it. */
+  /**
+   * Caller-side marker only: nothing in this module reads it. The soft-delete
+   * guard is part of the filter (combineWithSoftDelete), not a query param.
+   */
   include_deleted?: boolean;
 }
 

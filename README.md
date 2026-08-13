@@ -192,7 +192,11 @@ Flat convenience inputs (`firstName`, `email`, `domainName` as a string, `body` 
 - `query_records` — list ANY Twenty object type (people, companies, notes, tasks, noteTargets, taskTargets, opportunities, messageThreads, messages, custom objects). Same filter grammar as `list_people`.
 - `count_records` — returns `totalCount` for a filter (single cheap request).
 - `get_metadata_objects` / `get_object_metadata` — schema introspection.
-- `search_records` — full-text across object types.
+- `search_records` — case-insensitive substring match across object types, over each object's
+  identifying fields (people: name/email/phone/jobTitle, companies: name/domain, opportunities:
+  name, notes and tasks: title). Not full-text: Twenty's REST records endpoint has no search, so
+  this is an `ilike` filter. Object types outside that list, and blank terms, return an error
+  rather than unfiltered rows.
 
 </details>
 

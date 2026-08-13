@@ -1,4 +1,4 @@
-import { andExpr, buildListQuery, type RestClient, SEARCHABLE_FIELDS, searchExpr, combineWithSoftDelete } from "@twenty-crm/core";
+import { andExpr, buildListQuery, type RestClient, SEARCHABLE_FIELDS, searchExprForType, requireSearchExpr, combineWithSoftDelete } from "@twenty-crm/core";
 import { text } from "./_render.ts";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolHandler } from "../types.ts";
@@ -56,7 +56,7 @@ export const definitions: Tool[] = [
         offset: { type: "number" },
         starting_after: { type: "string" },
         ending_before: { type: "string" },
-        search: { type: "string" },
+        search: { type: "string", description: "Case-insensitive substring match on the object's identifying fields. Errors for object types without a verified field set — see search_records." },
         include_deleted: { type: "boolean" },
       },
       required: ["objectType"],
@@ -141,7 +141,7 @@ export function createHandlers(client: RestClient): Record<string, ToolHandler> 
       // AND-ed into the filter. searchExpr throws for an object type with no
       // verified searchable fields — better a loud error than the old silent
       // behaviour, where the ignored `search=` returned the whole table.
-      const withSearch = andExpr(filter ?? null, search ? searchExpr(objectType, search) : null);
+      const withSearch = andExpr(filter ?? null, search ? searchExprForType(objectType, search) : null);
       const finalFilter = combineWithSoftDelete(withSearch, include_deleted);
       const qs = buildListQuery({
         filter: finalFilter, order_by, depth, limit, offset,
@@ -186,10 +186,10 @@ export function createHandlers(client: RestClient): Record<string, ToolHandler> 
       for (const objectType of objectTypes) {
         try {
           // Was `?search=<query>`, which Twenty ignores — every object type
-          // returned its first N records regardless of the query. searchExpr
-          // throws for an object with no verified searchable fields, so an
-          // unsupported type now reports an error instead of fake matches.
-          const expr = searchExpr(objectType, query);
+          // returned its first N records regardless of the query. This throws
+          // both for an unsupported object type and for a blank term, so
+          // neither can degrade into an unfiltered list dressed up as results.
+          const expr = requireSearchExpr(objectType, query);
           const qs = buildListQuery({
             filter: combineWithSoftDelete(expr, false),
             limit,

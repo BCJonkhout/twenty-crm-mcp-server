@@ -52,7 +52,7 @@ export const definitions: Tool[] = [
         offset: { type: "number" },
         starting_after: { type: "string" },
         ending_before: { type: "string" },
-        search: { type: "string" },
+        search: { type: "string", description: "Case-insensitive substring match on the note title. AND-ed with filter." },
         include_deleted: { type: "boolean" },
       },
     },

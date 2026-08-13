@@ -64,29 +64,49 @@ export function orExpr(...clauses: Array<string | null | undefined | false>): st
  * existing filter builders, tasks by the documented field list in the MCP tool.
  * Adding an unverified field silently narrows results to zero — check first.
  */
-export const SEARCHABLE_FIELDS: Record<string, readonly string[]> = {
-  people: ["name.firstName", "name.lastName", "emails.primaryEmail"],
+// `as const satisfies` rather than a plain Record: it keeps the literal keys so
+// SearchableObject below is a union, which makes a typo at an internal call
+// site a tsc error instead of a runtime throw on a real user's search.
+export const SEARCHABLE_FIELDS = {
+  // Mirrors SEARCH_FIELDS_FOR_PERSON in the Twenty fork: name, emails, phones,
+  // jobTitle. Kept in step deliberately — `cato people search "advocaat"` is a
+  // documented workflow and only works because jobTitle is in here.
+  people: ["name.firstName", "name.lastName", "emails.primaryEmail", "phones.primaryPhoneNumber", "jobTitle"],
   companies: ["name", "domainName.primaryLinkUrl"],
   opportunities: ["name"],
+  // The server also searches bodyV2, deliberately excluded here: it is
+  // RICH_TEXT_V2 (jsonb) and does not take an [ilike] clause.
   notes: ["title"],
   tasks: ["title"],
-};
+} as const satisfies Record<string, readonly string[]>;
+
+export type SearchableObject = keyof typeof SEARCHABLE_FIELDS;
 
 export class UnsearchableObjectError extends Error {}
 
+/** True when free-text search is supported for this object name. */
+export function isSearchableObject(object: string): object is SearchableObject {
+  return Object.prototype.hasOwnProperty.call(SEARCHABLE_FIELDS, object);
+}
+
 /**
- * Free-text term -> a real Twenty filter expression.
+ * Free-text term -> a real Twenty filter expression, for an object type only
+ * known at runtime (query_records / search_records take one as an argument).
  *
  * Throws rather than returning null for an unknown object: silently dropping
  * the term is the exact failure this replaces (you get every record back and
  * it looks like a result set). A caller that cannot search must say so.
+ *
+ * Returns null for a blank term — meaning "no search clause", which is right
+ * when the term is one optional filter among many. A search-ONLY entry point
+ * must treat null as an error instead of running an unfiltered query; see
+ * requireSearchExpr.
  */
-export function searchExpr(object: string, term: string): string | null {
+export function searchExprForType(object: string, term: string): string | null {
   const trimmed = term.trim();
   if (!trimmed) return null;
 
-  const fields = SEARCHABLE_FIELDS[object];
-  if (!fields) {
+  if (!isSearchableObject(object)) {
     const known = Object.keys(SEARCHABLE_FIELDS).sort().join(", ");
     throw new UnsearchableObjectError(
       `Free-text search is not supported for '${object}' — no verified searchable fields. ` +
@@ -98,7 +118,27 @@ export function searchExpr(object: string, term: string): string | null {
   // Twenty's grammar has no ESCAPE clause — so those stay ILIKE wildcards
   // inside a search term. Documented limitation, not an oversight: a search
   // for "50%" also matches "50 procent".
-  return orExpr(...fields.map((f) => clause(f, "ilike", `%${trimmed}%`)));
+  return orExpr(...SEARCHABLE_FIELDS[object].map((f) => clause(f, "ilike", `%${trimmed}%`)));
+}
+
+/** Same, for a statically-known object — a typo here fails at compile time. */
+export function searchExpr(object: SearchableObject, term: string): string | null {
+  return searchExprForType(object, term);
+}
+
+/**
+ * For entry points whose ONLY job is to search (`cato <object> search <term>`,
+ * the search_records tool). A blank term there must not quietly degrade into
+ * "list everything" — that is the original bug wearing a different hat.
+ */
+export function requireSearchExpr(object: string, term: string): string {
+  const expr = searchExprForType(object, term);
+  if (!expr) {
+    throw new UnsearchableObjectError(
+      `Search needs a non-empty term — a blank search would return unfiltered records.`,
+    );
+  }
+  return expr;
 }
 
 // Compose an outer filter and extra soft-delete guard without nesting "and(and(...))".

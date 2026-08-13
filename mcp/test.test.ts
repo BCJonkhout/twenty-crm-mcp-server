@@ -424,10 +424,22 @@ describe("Metadata name resolution", () => {
 // ---------------------------------------------------------------------------
 
 describe("Search", () => {
-  it("search_records returns results", async () => {
-    const res = await api<any>("/rest/people?search=MCPTest&limit=5");
-    expect(Array.isArray(res.data.people)).toBe(true);
-    expect(res.data.people.length >= 1).toBe(true);
+  // This used to hit `/rest/people?search=MCPTest` and assert "at least one
+  // row", which passed for the wrong reason: the endpoint ignores `search=`,
+  // so it was asserting that the table is non-empty. The point of a search
+  // test is that a term that matches nothing returns nothing.
+  it("filters on the search term instead of returning the whole table", async () => {
+    const expr = requireSearchExpr("people", "MCPTest");
+    const hits = await api<any>(`/rest/people${buildListQuery({ filter: expr, limit: 5 })}`);
+    expect(Array.isArray(hits.data.people)).toBe(true);
+
+    const nonsense = requireSearchExpr("people", "zzqqxxnonsense123");
+    const misses = await api<any>(`/rest/people${buildListQuery({ filter: nonsense, limit: 5 })}`);
+    expect(misses.data.people.length).toBe(0);
+  });
+
+  it("refuses a blank term rather than listing everything", () => {
+    expect(() => requireSearchExpr("people", "   ")).toThrow(/non-empty term/);
   });
 });
 
@@ -435,7 +447,7 @@ describe("Search", () => {
 // Unit tests for the helper modules
 // ---------------------------------------------------------------------------
 
-import { buildListQuery, escapeFilterValue, andExpr, orExpr, combineWithSoftDelete, clause, buildWrappedSql, transformPersonData, transformCompanyData, transformBodyField } from "@twenty-crm/core";
+import { buildListQuery, escapeFilterValue, andExpr, orExpr, combineWithSoftDelete, clause, requireSearchExpr, buildWrappedSql, transformPersonData, transformCompanyData, transformBodyField } from "@twenty-crm/core";
 
 describe("filter.ts", () => {
   it("escapeFilterValue handles strings, numbers, arrays, null", () => {

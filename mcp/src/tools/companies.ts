@@ -103,7 +103,7 @@ OWNERSHIP:
         offset: { type: "number" },
         starting_after: { type: "string" },
         ending_before: { type: "string" },
-        search: { type: "string" },
+        search: { type: "string", description: "Case-insensitive substring match on company name or domain. AND-ed with filter." },
         include_deleted: { type: "boolean" },
       },
     },

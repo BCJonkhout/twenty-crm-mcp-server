@@ -176,8 +176,8 @@ describe("search term reaches the filter, not a query param", () => {
     expect(p.filter).toBe("deletedAt[is]:NULL");
   });
 
-  // opportunities and notes have no `search` subcommand, so they are reached
-  // through the builders (which the MCP tools also use).
+  // opportunities and notes have no `search` subcommand, so the builders are
+  // the only way in from the CLI. (The MCP tools call searchExpr directly.)
   it("searches opportunities and notes on their own name/title field", () => {
     expect(buildOpportunityFilter({ search: "Teamgenoten" }))
       .toContain('name[ilike]:"%Teamgenoten%"');
