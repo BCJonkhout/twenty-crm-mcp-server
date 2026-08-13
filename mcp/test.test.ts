@@ -429,9 +429,13 @@ describe("Search", () => {
   // so it was asserting that the table is non-empty. The point of a search
   // test is that a term that matches nothing returns nothing.
   it("filters on the search term instead of returning the whole table", async () => {
+    // Both directions matter. Asserting only "nonsense returns nothing" would
+    // stay green if the field set matched nothing at all — so pin the positive
+    // half against the MCPTest fixture created in beforeAll.
     const expr = requireSearchExpr("people", "MCPTest");
     const hits = await api<any>(`/rest/people${buildListQuery({ filter: expr, limit: 5 })}`);
     expect(Array.isArray(hits.data.people)).toBe(true);
+    expect(hits.data.people.length).toBeGreaterThanOrEqual(1);
 
     const nonsense = requireSearchExpr("people", "zzqqxxnonsense123");
     const misses = await api<any>(`/rest/people${buildListQuery({ filter: nonsense, limit: 5 })}`);

@@ -138,9 +138,9 @@ export function createHandlers(client: RestClient): Record<string, ToolHandler> 
         objectType, filter, order_by, depth, limit = 20, offset, starting_after, ending_before, search, include_deleted = false,
       } = (args ?? {}) as QueryRecordsArgs;
       if (!objectType) throw new Error("objectType is required");
-      // AND-ed into the filter. searchExpr throws for an object type with no
-      // verified searchable fields — better a loud error than the old silent
-      // behaviour, where the ignored `search=` returned the whole table.
+      // AND-ed into the filter. searchExprForType throws for an object type
+      // with no verified searchable fields — better a loud error than the old
+      // silent behaviour, where the ignored `search=` returned the whole table.
       const withSearch = andExpr(filter ?? null, search ? searchExprForType(objectType, search) : null);
       const finalFilter = combineWithSoftDelete(withSearch, include_deleted);
       const qs = buildListQuery({

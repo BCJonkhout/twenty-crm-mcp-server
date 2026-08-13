@@ -187,7 +187,7 @@ export function flagSpecsFor(command: readonly string[]): FlagSpecs {
 export const COMMAND_SUMMARIES: Record<string, string> = {
   "people list": "List people with CRM filters.",
   "people get": "Fetch one person by id.",
-  "people search": "Search people by first name, last name or primary email (case-insensitive substring).",
+  "people search": "Search people by first name, last name, email, phone or job title (case-insensitive substring).",
   "companies list": "List companies with CRM filters.",
   "companies get": "Fetch one company by id.",
   "companies search": "Search companies by name or domain (case-insensitive substring).",

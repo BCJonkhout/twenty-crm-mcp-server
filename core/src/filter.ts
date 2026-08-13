@@ -60,9 +60,11 @@ export function orExpr(...clauses: Array<string | null | undefined | false>): st
  * fields below, which is a filter the server actually honours.
  *
  * Every field here is verified against crm.prudai.com (v1.19), not guessed:
- * people/companies by live query on 2026-08-13, opportunities/notes by the
- * existing filter builders, tasks by the documented field list in the MCP tool.
- * Adding an unverified field silently narrows results to zero — check first.
+ * people mirrors the fork's own SEARCH_FIELDS_FOR_PERSON and each subfield was
+ * confirmed by live [ilike] query; companies likewise; opportunities and notes
+ * come from the existing filter builders; tasks from the documented field list
+ * in the MCP tool. Adding an unverified field silently narrows results to
+ * zero — check against the live API first.
  */
 // `as const satisfies` rather than a plain Record: it keeps the literal keys so
 // SearchableObject below is a union, which makes a typo at an internal call
@@ -84,6 +86,13 @@ export type SearchableObject = keyof typeof SEARCHABLE_FIELDS;
 
 export class UnsearchableObjectError extends Error {}
 
+/**
+ * A term was supplied but is blank. Distinct from UnsearchableObjectError:
+ * the object is searchable, the term is not — a caller branching on the error
+ * needs to tell those apart.
+ */
+export class BlankSearchTermError extends Error {}
+
 /** True when free-text search is supported for this object name. */
 export function isSearchableObject(object: string): object is SearchableObject {
   return Object.prototype.hasOwnProperty.call(SEARCHABLE_FIELDS, object);
@@ -97,14 +106,21 @@ export function isSearchableObject(object: string): object is SearchableObject {
  * the term is the exact failure this replaces (you get every record back and
  * it looks like a result set). A caller that cannot search must say so.
  *
- * Returns null for a blank term — meaning "no search clause", which is right
- * when the term is one optional filter among many. A search-ONLY entry point
- * must treat null as an error instead of running an unfiltered query; see
- * requireSearchExpr.
+ * An empty string means "no search" and returns null — right when the term is
+ * one optional filter among many. A term that is present but whitespace-only
+ * is a mistake, not a choice, and throws: silently dropping it would list the
+ * whole table back to a caller who thought they were searching. A search-ONLY
+ * entry point must also treat null as an error; see requireSearchExpr.
  */
 export function searchExprForType(object: string, term: string): string | null {
+  if (term === "") return null;
   const trimmed = term.trim();
-  if (!trimmed) return null;
+  if (!trimmed) {
+    throw new BlankSearchTermError(
+      "Search term is blank — search needs a non-empty term, " +
+        "and a whitespace-only one would return unfiltered records.",
+    );
+  }
 
   if (!isSearchableObject(object)) {
     const known = Object.keys(SEARCHABLE_FIELDS).sort().join(", ");
@@ -134,7 +150,7 @@ export function searchExpr(object: SearchableObject, term: string): string | nul
 export function requireSearchExpr(object: string, term: string): string {
   const expr = searchExprForType(object, term);
   if (!expr) {
-    throw new UnsearchableObjectError(
+    throw new BlankSearchTermError(
       `Search needs a non-empty term — a blank search would return unfiltered records.`,
     );
   }

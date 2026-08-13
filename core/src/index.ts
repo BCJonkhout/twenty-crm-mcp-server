@@ -27,6 +27,7 @@ export {
   isSearchableObject,
   SEARCHABLE_FIELDS,
   UnsearchableObjectError,
+  BlankSearchTermError,
   type SearchableObject,
   type FilterValue,
 } from "./filter.ts";

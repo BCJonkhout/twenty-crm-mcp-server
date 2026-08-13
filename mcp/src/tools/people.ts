@@ -161,7 +161,7 @@ OWNERSHIP — row-level-permission invariant:
         offset: { type: "number", description: "Prefer starting_after for large sets." },
         starting_after: { type: "string", description: "Cursor from a prior pageInfo.endCursor to fetch the next page." },
         ending_before: { type: "string", description: "Cursor to fetch the previous page." },
-        search: { type: "string", description: "Case-insensitive substring match on first name, last name or primary email. AND-ed with filter." },
+        search: { type: "string", description: "Case-insensitive substring match on first name, last name, primary email, primary phone or job title. AND-ed with filter." },
         companyId: { type: "string", description: "Shortcut — equivalent to filter: companyId[eq]:<id>." },
         include_deleted: { type: "boolean", description: "If true, soft-deleted rows are returned. Default false." },
       },

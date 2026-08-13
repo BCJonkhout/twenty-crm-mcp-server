@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
-  SEARCHABLE_FIELDS, UnsearchableObjectError, requireSearchExpr, searchExpr, searchExprForType,
+  BlankSearchTermError, SEARCHABLE_FIELDS, UnsearchableObjectError,
+  requireSearchExpr, searchExpr, searchExprForType,
 } from "../src/filter.ts";
 
 describe("searchExpr", () => {
@@ -33,9 +34,13 @@ describe("searchExpr", () => {
     expect(searchExpr("people", "advocaat")).toContain('jobTitle[ilike]:"%advocaat%"');
   });
 
-  it("treats a blank or whitespace-only term as no search at all", () => {
+  it("treats an empty string as 'no search', but a blank one as a mistake", () => {
+    // "" is a caller saying it has no term. "   " is a caller who thinks it
+    // has one — dropping that silently is how you list the whole table to
+    // someone who believes they searched.
     expect(searchExpr("companies", "")).toBeNull();
-    expect(searchExpr("companies", "   ")).toBeNull();
+    expect(() => searchExpr("companies", "   ")).toThrow(BlankSearchTermError);
+    expect(() => searchExpr("companies", "\t\n")).toThrow(/non-empty term/);
   });
 
   it("trims the term rather than searching for the spaces", () => {
@@ -51,6 +56,7 @@ describe("searchExpr", () => {
     // searchExpr returning null is fine when the term is one optional filter
     // among many, but a search command with a blank term would fall through to
     // an unfiltered list — the original bug in a different disguise.
+    expect(() => requireSearchExpr("companies", "")).toThrow(BlankSearchTermError);
     expect(() => requireSearchExpr("companies", "")).toThrow(/non-empty term/);
     expect(() => requireSearchExpr("companies", "   ")).toThrow(/non-empty term/);
     expect(requireSearchExpr("companies", "Acme")).toContain('name[ilike]:"%Acme%"');
