@@ -27,7 +27,6 @@ export interface ListInvocation {
   limit: number;
   orderBy?: string;
   depth?: number;
-  search?: string;
   fetchAll: boolean;
 }
 
@@ -38,6 +37,10 @@ export interface ListInvocation {
 export function planList(objectPath: ObjectPath, flags: Record<string, FlagValue>): ListInvocation {
   const includeDeleted = flagBool(flags, "include-deleted") === true;
   const raw = flagString(flags, "filter");
+  // A free-text term becomes part of the filter. It used to be handed to the
+  // server as `search=`, which Twenty ignores — every record came back and
+  // looked like a hit list. See searchExpr() in @twenty-crm/core.
+  const search = flagString(flags, "query");
 
   let filter: string | null;
   switch (objectPath) {
@@ -58,6 +61,7 @@ export function planList(objectPath: ObjectPath, flags: Record<string, FlagValue
         contactable: flagBool(flags, "contactable"),
         createdSince: flagString(flags, "created-since"),
         updatedSince: flagString(flags, "updated-since"),
+        search,
         raw,
         includeDeleted,
       });
@@ -77,6 +81,7 @@ export function planList(objectPath: ObjectPath, flags: Record<string, FlagValue
         maxEmployees: flagNumber(flags, "max-employees"),
         idealCustomerProfile: flagBool(flags, "icp"),
         createdSince: flagString(flags, "created-since"),
+        search,
         raw,
         includeDeleted,
       });
@@ -89,6 +94,7 @@ export function planList(objectPath: ObjectPath, flags: Record<string, FlagValue
         ownerId: flagString(flags, "owner-id"),
         closeAfter: flagString(flags, "close-after"),
         closeBefore: flagString(flags, "close-before"),
+        search,
         raw,
         includeDeleted,
       });
@@ -98,6 +104,7 @@ export function planList(objectPath: ObjectPath, flags: Record<string, FlagValue
         title: flagString(flags, "title"),
         assigneeId: flagString(flags, "assignee-id"),
         createdSince: flagString(flags, "created-since"),
+        search,
         raw,
         includeDeleted,
       });
@@ -111,7 +118,6 @@ export function planList(objectPath: ObjectPath, flags: Record<string, FlagValue
     limit,
     orderBy: flagString(flags, "order-by"),
     depth: flagNumber(flags, "depth"),
-    search: flagString(flags, "query"),
     fetchAll: flagBool(flags, "all") === true,
   };
 }
@@ -124,7 +130,6 @@ export async function fetchRecords(client: RestClient, plan: ListInvocation): Pr
       order_by: plan.orderBy,
       depth: plan.depth,
       limit: MAX_PAGE,
-      search: plan.search,
       include_deleted: true, // soft-delete guard already baked into plan.filter
     });
     for await (const record of iterator) {
@@ -139,7 +144,6 @@ export async function fetchRecords(client: RestClient, plan: ListInvocation): Pr
     order_by: plan.orderBy,
     depth: plan.depth,
     limit: Math.min(plan.limit, MAX_PAGE),
-    search: plan.search,
     include_deleted: true,
   });
   const result = await client.request<{ data?: Record<string, TwentyRecord[]> }>(

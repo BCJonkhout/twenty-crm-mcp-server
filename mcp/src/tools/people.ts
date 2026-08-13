@@ -1,4 +1,4 @@
-import { buildListQuery, type RestClient, transformPersonData, type PersonInput, combineWithSoftDelete } from "@twenty-crm/core";
+import { buildListQuery, type RestClient, searchExpr, transformPersonData, type PersonInput, combineWithSoftDelete } from "@twenty-crm/core";
 import { text, ok } from "./_render.ts";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolHandler } from "../types.ts";
@@ -161,7 +161,7 @@ OWNERSHIP — row-level-permission invariant:
         offset: { type: "number", description: "Prefer starting_after for large sets." },
         starting_after: { type: "string", description: "Cursor from a prior pageInfo.endCursor to fetch the next page." },
         ending_before: { type: "string", description: "Cursor to fetch the previous page." },
-        search: { type: "string", description: "Full-text search (name/email). Combine with filter for best results." },
+        search: { type: "string", description: "Case-insensitive substring match on first name, last name or primary email. AND-ed with filter." },
         companyId: { type: "string", description: "Shortcut — equivalent to filter: companyId[eq]:<id>." },
         include_deleted: { type: "boolean", description: "If true, soft-deleted rows are returned. Default false." },
       },
@@ -214,6 +214,12 @@ export function createHandlers(client: RestClient): Record<string, ToolHandler> 
       const clauses: string[] = [];
       if (filter) clauses.push(filter);
       if (companyId) clauses.push(`companyId[eq]:"${companyId}"`);
+      // AND-ed into the filter — Twenty ignores an unknown `search=` param and
+      // would hand back every person as though they all matched.
+      if (search) {
+        const expr = searchExpr("people", search);
+        if (expr) clauses.push(expr);
+      }
       const combined = clauses.length === 0
         ? null
         : clauses.length === 1 ? clauses[0]! : `and(${clauses.join(",")})`;
@@ -227,7 +233,6 @@ export function createHandlers(client: RestClient): Record<string, ToolHandler> 
         offset,
         after: starting_after,
         before: ending_before,
-        search,
         include_deleted: true, // combineWithSoftDelete already applied
       });
       const result = await client.request(`/rest/people${qs}`);

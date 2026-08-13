@@ -172,15 +172,20 @@ export interface ListQueryParams {
   offset?: number;
   after?: string | null;
   before?: string | null;
-  search?: string;
   extraParams?: Record<string, unknown>;
   /** Caller-side flag — `iterRecords` reads it but `buildListQuery` ignores it. */
   include_deleted?: boolean;
 }
 
 // Build a /rest/{object} query string from structured params.
-// Handles filter, order_by, depth, limit, after/before cursors, offset, search.
+// Handles filter, order_by, depth, limit, after/before cursors, offset.
 // Soft-delete handling is the caller's responsibility (see filter.ts).
+//
+// Deliberately has NO `search` param. Twenty's records endpoint ignores query
+// params it does not recognise, so an earlier `search=<term>` was dropped on
+// the floor and the caller got the entire table back looking like a result
+// set. Free-text search goes through searchExpr() in filter.ts, which builds
+// an ilike filter the server actually applies.
 export function buildListQuery(params: ListQueryParams = {}): string {
   const {
     filter,
@@ -190,7 +195,6 @@ export function buildListQuery(params: ListQueryParams = {}): string {
     offset,
     after,
     before,
-    search,
     extraParams = {},
   } = params;
 
@@ -202,7 +206,6 @@ export function buildListQuery(params: ListQueryParams = {}): string {
   if (offset !== undefined) parts.push(`offset=${encodeURIComponent(String(offset))}`);
   if (after) parts.push(`starting_after=${encodeURIComponent(after)}`);
   if (before) parts.push(`ending_before=${encodeURIComponent(before)}`);
-  if (search) parts.push(`search=${encodeURIComponent(search)}`);
   for (const [k, v] of Object.entries(extraParams)) {
     if (v !== undefined && v !== null) parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
   }

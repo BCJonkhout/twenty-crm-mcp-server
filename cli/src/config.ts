@@ -19,8 +19,9 @@ export const DEFAULT_BASE_URL = "https://crm.prudai.com";
 
 /**
  * Where the CLI's own credentials live in OpenBao. The convention in this
- * workspace is kv/prod/<service>/app (see /root/bin/bao-fetch). NOTE: this
- * path does not exist yet — Beau has to create it together with the key.
+ * workspace is kv/prod/<service>/app (see /root/bin/bao-fetch). Provisioned
+ * 2026-08-13 and holding CATO_API_KEY — set CATO_BAO_TOKEN and the CLI reads
+ * it from here.
  * kv/prod/prudai-twenty/app is deliberately NOT reused: bao-fetch renders that
  * whole path into the Twenty server's .env, so a client key stored there would
  * be injected into the CRM container's environment.

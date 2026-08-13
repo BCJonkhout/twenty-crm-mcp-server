@@ -122,3 +122,66 @@ describe("planList — flags to a list invocation", () => {
     expect(p.depth).toBe(1);
   });
 });
+
+// Regression guard. `cato <object> search <term>` used to hand the term to the
+// server as `search=<term>`; Twenty ignores unknown query params, so the whole
+// table came back looking like a hit list — a search for a string that matches
+// nothing returned the same rows as a search for a real company.
+describe("search term reaches the filter, not a query param", () => {
+  // Mirrors the production path: index.ts resolves `--query` or the positional
+  // into flags.query, then hands the flags to runList -> planList. Only people
+  // and companies expose a `search` subcommand, so those are the only two the
+  // CLI can reach this way.
+  const planFor = (object: "people" | "companies", argv: string[]) => {
+    const parsed = parseArgs(argv, COMMAND_TREE, flagSpecsFor);
+    expect(parsed.errors).toEqual([]);
+    return planList(object, parsed.flags);
+  };
+
+  it("puts a people search term in the filter over name and email", () => {
+    const p = planFor("people", ["people", "search", "--query", "Lempsink"]);
+    expect(p.filter).toContain('name.firstName[ilike]:"%Lempsink%"');
+    expect(p.filter).toContain('name.lastName[ilike]:"%Lempsink%"');
+    expect(p.filter).toContain('emails.primaryEmail[ilike]:"%Lempsink%"');
+    expect(p.filter).toContain("or(");
+  });
+
+  it("puts a company search term in the filter over name and domain", () => {
+    const p = planFor("companies", ["companies", "search", "--query", "Teamgenoten"]);
+    expect(p.filter).toContain('name[ilike]:"%Teamgenoten%"');
+    expect(p.filter).toContain('domainName.primaryLinkUrl[ilike]:"%Teamgenoten%"');
+  });
+
+  it("no longer exposes a search field on the invocation at all", () => {
+    const p = planFor("companies", ["companies", "search", "--query", "Teamgenoten"]);
+    // The dead param is gone; if it ever returns, the term would silently stop
+    // filtering again. Assert on the actual object, not on a type.
+    expect(Object.keys(p)).not.toContain("search");
+  });
+
+  it("ANDs the search term together with filter flags instead of replacing them", () => {
+    const p = planFor("companies", ["companies", "search", "--query", "Teamgenoten", "--city", "Enschede"]);
+    expect(p.filter).toContain('address.addressCity[ilike]:"%Enschede%"');
+    expect(p.filter).toContain('name[ilike]:"%Teamgenoten%"');
+    expect(p.filter?.startsWith("and(")).toBe(true);
+  });
+
+  it("keeps the soft-delete guard when searching", () => {
+    const p = planFor("companies", ["companies", "search", "--query", "Teamgenoten"]);
+    expect(p.filter).toContain("deletedAt[is]:NULL");
+  });
+
+  it("leaves the filter alone when no term was given", () => {
+    const p = planFor("companies", ["companies", "list"]);
+    expect(p.filter).toBe("deletedAt[is]:NULL");
+  });
+
+  // opportunities and notes have no `search` subcommand, so they are reached
+  // through the builders (which the MCP tools also use).
+  it("searches opportunities and notes on their own name/title field", () => {
+    expect(buildOpportunityFilter({ search: "Teamgenoten" }))
+      .toContain('name[ilike]:"%Teamgenoten%"');
+    expect(buildNoteFilter({ search: "escalatie" }))
+      .toContain('title[ilike]:"%escalatie%"');
+  });
+});

@@ -1,4 +1,4 @@
-import { buildListQuery, type RestClient, transformCompanyData, type CompanyInput, combineWithSoftDelete } from "@twenty-crm/core";
+import { andExpr, buildListQuery, type RestClient, searchExpr, transformCompanyData, type CompanyInput, combineWithSoftDelete } from "@twenty-crm/core";
 import { text, ok } from "./_render.ts";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolHandler } from "../types.ts";
@@ -149,10 +149,13 @@ export function createHandlers(client: RestClient): Record<string, ToolHandler> 
       const {
         filter, order_by, depth, limit = 20, offset, starting_after, ending_before, search, include_deleted = false,
       } = (args ?? {}) as ListCompaniesArgs;
-      const finalFilter = combineWithSoftDelete(filter ?? null, include_deleted);
+      // `search` is AND-ed into the filter, not sent as a query param: Twenty
+      // ignores an unknown `search=` and would return the whole table.
+      const withSearch = andExpr(filter ?? null, search ? searchExpr("companies", search) : null);
+      const finalFilter = combineWithSoftDelete(withSearch, include_deleted);
       const qs = buildListQuery({
         filter: finalFilter, order_by, depth, limit, offset,
-        after: starting_after, before: ending_before, search,
+        after: starting_after, before: ending_before,
         include_deleted: true,
       });
       const result = await client.request(`/rest/companies${qs}`);

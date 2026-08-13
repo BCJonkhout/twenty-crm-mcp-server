@@ -50,6 +50,57 @@ export function orExpr(...clauses: Array<string | null | undefined | false>): st
   return `or(${flat.join(",")})`;
 }
 
+/**
+ * Which fields a free-text search covers, per object.
+ *
+ * Twenty's `/rest/{object}` endpoint has NO full-text search: it silently
+ * ignores query params it does not know, so a `search=` param came back as the
+ * complete unfiltered table — indistinguishable from a hit list. Free-text
+ * search is therefore expressed as an `or(...)` of `[ilike]` clauses over the
+ * fields below, which is a filter the server actually honours.
+ *
+ * Every field here is verified against crm.prudai.com (v1.19), not guessed:
+ * people/companies by live query on 2026-08-13, opportunities/notes by the
+ * existing filter builders, tasks by the documented field list in the MCP tool.
+ * Adding an unverified field silently narrows results to zero — check first.
+ */
+export const SEARCHABLE_FIELDS: Record<string, readonly string[]> = {
+  people: ["name.firstName", "name.lastName", "emails.primaryEmail"],
+  companies: ["name", "domainName.primaryLinkUrl"],
+  opportunities: ["name"],
+  notes: ["title"],
+  tasks: ["title"],
+};
+
+export class UnsearchableObjectError extends Error {}
+
+/**
+ * Free-text term -> a real Twenty filter expression.
+ *
+ * Throws rather than returning null for an unknown object: silently dropping
+ * the term is the exact failure this replaces (you get every record back and
+ * it looks like a result set). A caller that cannot search must say so.
+ */
+export function searchExpr(object: string, term: string): string | null {
+  const trimmed = term.trim();
+  if (!trimmed) return null;
+
+  const fields = SEARCHABLE_FIELDS[object];
+  if (!fields) {
+    const known = Object.keys(SEARCHABLE_FIELDS).sort().join(", ");
+    throw new UnsearchableObjectError(
+      `Free-text search is not supported for '${object}' — no verified searchable fields. ` +
+        `Searchable objects: ${known}. Use --filter with an explicit Twenty expression instead.`,
+    );
+  }
+
+  // clause() escapes quotes and backslashes. It does NOT escape % or _, and
+  // Twenty's grammar has no ESCAPE clause — so those stay ILIKE wildcards
+  // inside a search term. Documented limitation, not an oversight: a search
+  // for "50%" also matches "50 procent".
+  return orExpr(...fields.map((f) => clause(f, "ilike", `%${trimmed}%`)));
+}
+
 // Compose an outer filter and extra soft-delete guard without nesting "and(and(...))".
 export function combineWithSoftDelete(filterExpr: string | null, includeDeleted: boolean): string | null {
   if (includeDeleted) return filterExpr || null;

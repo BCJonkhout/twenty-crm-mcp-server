@@ -21,6 +21,9 @@ export {
   andExpr,
   orExpr,
   combineWithSoftDelete,
+  searchExpr,
+  SEARCHABLE_FIELDS,
+  UnsearchableObjectError,
   type FilterValue,
 } from "./filter.ts";
 

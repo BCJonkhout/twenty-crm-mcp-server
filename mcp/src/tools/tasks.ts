@@ -1,4 +1,4 @@
-import { buildListQuery, type RestClient, transformBodyField, createTargetsForRecord, extractId, type BodyInput, combineWithSoftDelete } from "@twenty-crm/core";
+import { buildListQuery, type RestClient, searchExpr, transformBodyField, createTargetsForRecord, extractId, type BodyInput, combineWithSoftDelete } from "@twenty-crm/core";
 import { text, ok } from "./_render.ts";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolHandler } from "../types.ts";
@@ -129,11 +129,16 @@ export function createHandlers(client: RestClient): Record<string, ToolHandler> 
       if (filter) clauses.push(filter);
       if (status) clauses.push(`status[eq]:"${status}"`);
       if (assigneeId) clauses.push(`assigneeId[eq]:"${assigneeId}"`);
+      // AND-ed into the filter — Twenty ignores an unknown `search=` param.
+      if (search) {
+        const expr = searchExpr("tasks", search);
+        if (expr) clauses.push(expr);
+      }
       const combined = clauses.length === 0 ? null : clauses.length === 1 ? clauses[0]! : `and(${clauses.join(",")})`;
       const finalFilter = combineWithSoftDelete(combined, include_deleted);
       const qs = buildListQuery({
         filter: finalFilter, order_by, depth, limit, offset,
-        after: starting_after, before: ending_before, search,
+        after: starting_after, before: ending_before,
         include_deleted: true,
       });
       return text("Tasks:", await client.request(`/rest/tasks${qs}`));

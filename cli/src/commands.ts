@@ -84,7 +84,7 @@ const NOTE_FILTER_FLAGS: FlagSpecs = {
 };
 
 const SEARCH_FLAGS: FlagSpecs = {
-  query: { type: "string", placeholder: "<text>", description: "Full-text search term (also accepted as a positional argument)." },
+  query: { type: "string", placeholder: "<text>", description: "Substring to match, case-insensitive (also accepted as a positional argument). AND-ed with any filter flags." },
 };
 
 const SEGMENT_FLAGS: FlagSpecs = {
@@ -187,10 +187,10 @@ export function flagSpecsFor(command: readonly string[]): FlagSpecs {
 export const COMMAND_SUMMARIES: Record<string, string> = {
   "people list": "List people with CRM filters.",
   "people get": "Fetch one person by id.",
-  "people search": "Full-text search over people.",
+  "people search": "Search people by first name, last name or primary email (case-insensitive substring).",
   "companies list": "List companies with CRM filters.",
   "companies get": "Fetch one company by id.",
-  "companies search": "Full-text search over companies.",
+  "companies search": "Search companies by name or domain (case-insensitive substring).",
   "opportunities list": "List opportunities (pipeline).",
   "notes list": "List notes.",
   "segments build": "Build a target-audience selection from filters and write it out as JSON/CSV.",

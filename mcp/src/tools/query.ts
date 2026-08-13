@@ -1,4 +1,4 @@
-import { buildListQuery, type RestClient, combineWithSoftDelete } from "@twenty-crm/core";
+import { andExpr, buildListQuery, type RestClient, SEARCHABLE_FIELDS, searchExpr, combineWithSoftDelete } from "@twenty-crm/core";
 import { text } from "./_render.ts";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolHandler } from "../types.ts";
@@ -91,7 +91,11 @@ export const definitions: Tool[] = [
   },
   {
     name: "search_records",
-    description: "Full-text search across object types (uses the REST `search` param). Combine with query_records+filter for precision.",
+    description:
+      "Substring search across object types. Matches case-insensitively on each object's identifying fields " +
+      `(${Object.entries(SEARCHABLE_FIELDS).map(([o, f]) => `${o}: ${f.join("/")}`).join("; ")}). ` +
+      "Object types not listed there return an error rather than unfiltered results. " +
+      "Use query_records+filter for anything more precise.",
     inputSchema: {
       type: "object",
       properties: {
@@ -134,10 +138,14 @@ export function createHandlers(client: RestClient): Record<string, ToolHandler> 
         objectType, filter, order_by, depth, limit = 20, offset, starting_after, ending_before, search, include_deleted = false,
       } = (args ?? {}) as QueryRecordsArgs;
       if (!objectType) throw new Error("objectType is required");
-      const finalFilter = combineWithSoftDelete(filter ?? null, include_deleted);
+      // AND-ed into the filter. searchExpr throws for an object type with no
+      // verified searchable fields — better a loud error than the old silent
+      // behaviour, where the ignored `search=` returned the whole table.
+      const withSearch = andExpr(filter ?? null, search ? searchExpr(objectType, search) : null);
+      const finalFilter = combineWithSoftDelete(withSearch, include_deleted);
       const qs = buildListQuery({
         filter: finalFilter, order_by, depth, limit, offset,
-        after: starting_after, before: ending_before, search,
+        after: starting_after, before: ending_before,
         include_deleted: true,
       });
       const result = await client.request(`/rest/${objectType}${qs}`);
@@ -177,7 +185,17 @@ export function createHandlers(client: RestClient): Record<string, ToolHandler> 
       const results: Record<string, unknown> = {};
       for (const objectType of objectTypes) {
         try {
-          results[objectType] = await client.request(`/rest/${objectType}?search=${encodeURIComponent(query)}&limit=${limit}`);
+          // Was `?search=<query>`, which Twenty ignores — every object type
+          // returned its first N records regardless of the query. searchExpr
+          // throws for an object with no verified searchable fields, so an
+          // unsupported type now reports an error instead of fake matches.
+          const expr = searchExpr(objectType, query);
+          const qs = buildListQuery({
+            filter: combineWithSoftDelete(expr, false),
+            limit,
+            include_deleted: true,
+          });
+          results[objectType] = await client.request(`/rest/${objectType}${qs}`);
         } catch (err) {
           results[objectType] = { error: (err as Error).message };
         }

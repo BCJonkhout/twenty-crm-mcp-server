@@ -5,7 +5,7 @@
 // marketing), not guessed. See cli/openapi/cato.yaml, which is generated from
 // the same source.
 
-import { andExpr, clause, combineWithSoftDelete, orExpr } from "@twenty-crm/core";
+import { andExpr, clause, combineWithSoftDelete, orExpr, searchExpr } from "@twenty-crm/core";
 
 /** MULTI_SELECT `product` on person and company. */
 export const PRODUCT_VALUES = ["LEO", "VERA", "ZIA", "BEVER", "IRMA", "ORDO", "CATO"] as const;
@@ -67,6 +67,8 @@ export interface PeopleFilterInput {
   contactable?: boolean;
   createdSince?: string;
   updatedSince?: string;
+  /** Free-text term — AND-ed in as an ilike OR over the person's name/email. */
+  search?: string;
   /** Raw Twenty filter expression, AND-ed with everything else. */
   raw?: string;
   includeDeleted?: boolean;
@@ -111,6 +113,7 @@ export function buildPeopleFilter(input: PeopleFilterInput): string | null {
   }
   if (input.createdSince) parts.push(clause("createdAt", "gte", isoDate("created-since", input.createdSince)));
   if (input.updatedSince) parts.push(clause("updatedAt", "gte", isoDate("updated-since", input.updatedSince)));
+  if (input.search) parts.push(searchExpr("people", input.search));
   if (input.raw) parts.push(input.raw);
 
   return combineWithSoftDelete(andExpr(...parts), input.includeDeleted === true);
@@ -132,6 +135,8 @@ export interface CompanyFilterInput {
   maxEmployees?: number;
   idealCustomerProfile?: boolean;
   createdSince?: string;
+  /** Free-text term — AND-ed in as an ilike OR over company name/domain. */
+  search?: string;
   raw?: string;
   includeDeleted?: boolean;
 }
@@ -161,6 +166,7 @@ export function buildCompanyFilter(input: CompanyFilterInput): string | null {
     parts.push(clause("idealCustomerProfile", "eq", input.idealCustomerProfile));
   }
   if (input.createdSince) parts.push(clause("createdAt", "gte", isoDate("created-since", input.createdSince)));
+  if (input.search) parts.push(searchExpr("companies", input.search));
   if (input.raw) parts.push(input.raw);
 
   return combineWithSoftDelete(andExpr(...parts), input.includeDeleted === true);
@@ -175,6 +181,8 @@ export interface OpportunityFilterInput {
   ownerId?: string;
   closeBefore?: string;
   closeAfter?: string;
+  /** Free-text term — AND-ed in as an ilike over the opportunity name. */
+  search?: string;
   raw?: string;
   includeDeleted?: boolean;
 }
@@ -190,6 +198,7 @@ export function buildOpportunityFilter(input: OpportunityFilterInput): string | 
   if (input.ownerId) parts.push(clause("ownerId", "eq", input.ownerId));
   if (input.closeAfter) parts.push(clause("closeDate", "gte", isoDate("close-after", input.closeAfter)));
   if (input.closeBefore) parts.push(clause("closeDate", "lte", isoDate("close-before", input.closeBefore)));
+  if (input.search) parts.push(searchExpr("opportunities", input.search));
   if (input.raw) parts.push(input.raw);
 
   return combineWithSoftDelete(andExpr(...parts), input.includeDeleted === true);
@@ -201,6 +210,8 @@ export interface NoteFilterInput {
   title?: string;
   assigneeId?: string;
   createdSince?: string;
+  /** Free-text term — AND-ed in as an ilike over the note title. */
+  search?: string;
   raw?: string;
   includeDeleted?: boolean;
 }
@@ -211,6 +222,7 @@ export function buildNoteFilter(input: NoteFilterInput): string | null {
   if (input.title) parts.push(clause("title", "ilike", `%${input.title}%`));
   if (input.assigneeId) parts.push(clause("assigneeId", "eq", input.assigneeId));
   if (input.createdSince) parts.push(clause("createdAt", "gte", isoDate("created-since", input.createdSince)));
+  if (input.search) parts.push(searchExpr("notes", input.search));
   if (input.raw) parts.push(input.raw);
 
   return combineWithSoftDelete(andExpr(...parts), input.includeDeleted === true);

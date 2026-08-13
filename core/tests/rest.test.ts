@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { backoffMs, createRestClient, isIdempotent, shouldRetry } from "../src/rest.ts";
+import { backoffMs, buildListQuery, createRestClient, isIdempotent, shouldRetry } from "../src/rest.ts";
 
 describe("isIdempotent", () => {
   it("treats the read and replace verbs as safe to replay", () => {
@@ -159,5 +159,24 @@ describe("createRestClient retry behaviour", () => {
     try {
       expect(await client().request("/rest/companies/1", { method: "DELETE" })).toBeNull();
     } finally { restore(); }
+  });
+});
+
+describe("buildListQuery — no search param", () => {
+  it("never emits a search= param, whatever it is handed", () => {
+    // Twenty's /rest/{object} endpoint has no full-text search and silently
+    // drops query params it does not know. Emitting search= therefore looked
+    // like a filtered request and returned the entire table. Free-text search
+    // belongs in the filter (searchExpr), so this must stay absent.
+    const qs = buildListQuery({ filter: 'name[ilike]:"%acme%"', limit: 5 });
+    expect(qs).not.toContain("search=");
+    expect(qs).toContain("filter=");
+  });
+
+  it("still emits the params the server does honour", () => {
+    const qs = buildListQuery({ order_by: "createdAt[DescNullsFirst]", limit: 5, depth: 1 });
+    expect(qs).toContain("order_by=");
+    expect(qs).toContain("limit=5");
+    expect(qs).toContain("depth=1");
   });
 });

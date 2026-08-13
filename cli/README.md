@@ -211,9 +211,14 @@ documentatie beschrijft wie er mag verzenden — dat hoort niet publiek te staan
 
 ## Bekende afwijking
 
-`TWENTY_API_KEY` staat op dit moment in platte tekst in `/root/librechat/.env` en in
+`TWENTY_API_KEY` staat in platte tekst in `/root/librechat/.env` en in
 `/root/.claude/settings.json`, terwijl de overige secrets uit OpenBao komen. Dat is bestaande
 situatie, niet iets wat deze CLI introduceert — maar het hoort opgeruimd te worden.
+
+Sinds 2026-08-13 staat dezelfde sleutel óók in OpenBao op `kv/prod/cato-cli/app` (`CATO_API_KEY`),
+zodat de CLI hem zelf kan ophalen met `CATO_BAO_TOKEN` gezet. De plattetekstkopieën hierboven zijn
+daarmee niet meer de enige bron, maar ze bestaan nog — pas op dat je bij het roteren van de sleutel
+alle drie de plekken meeneemt.
 
 ## Ontwikkelen
 
