@@ -22,7 +22,7 @@ export const SALES_STATUS_VALUES = [
 export const VISIBILITY_VALUES = ["MARKETING", "RESTRICTED"] as const;
 
 /** SELECT `stage` on opportunity. */
-export const OPPORTUNITY_STAGE_VALUES = ["NEW", "SCREENING", "MEETING", "PROPOSAL", "CUSTOMER"] as const;
+export const OPPORTUNITY_STAGE_VALUES = ["NEW", "SCREENING", "MEETING", "PROPOSAL", "PILOT", "CUSTOMER", "VERLOREN"] as const;
 
 export class FilterError extends Error {}
 

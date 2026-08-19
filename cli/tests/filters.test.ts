@@ -88,6 +88,13 @@ describe("buildOpportunityFilter / buildNoteFilter", () => {
     expect(() => buildOpportunityFilter({ stage: "WON" })).toThrow(FilterError);
   });
 
+  // PILOT (8 records) and VERLOREN (4) were live in CATO while the CLI rejected
+  // both, so `--stage PILOT` hid every running pilot. Regression guard.
+  it("accepts the stages that were missing from the enum until 19-08-2026", () => {
+    expect(buildOpportunityFilter({ stage: "PILOT" })!).toContain('stage[eq]:"PILOT"');
+    expect(buildOpportunityFilter({ stage: "verloren" })!).toContain('stage[eq]:"VERLOREN"');
+  });
+
   it("filters notes on title", () => {
     expect(buildNoteFilter({ title: "Juristi" })!).toContain('title[ilike]:"%Juristi%"');
   });

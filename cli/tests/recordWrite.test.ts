@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
-  buildCompanyBody, buildPersonBody, createRecord, deleteRecord, RecordWriteError,
+  buildCompanyBody, buildNoteBody, buildOpportunityBody, buildPersonBody, createNoteWithTargets,
+  createRecord, deleteRecord, findOpenOpportunities, RecordWriteError,
   renderWriteDryRun, requireCreateFields, resolveAssignee, updateRecord,
 } from "../src/commands/recordWrite.ts";
 
@@ -128,5 +129,127 @@ describe("renderWriteDryRun", () => {
 
   it("warns that a delete hides the record", () => {
     expect(renderWriteDryRun("delete", "companies", null, "c-1")).toContain("hides the record");
+  });
+});
+
+describe("buildOpportunityBody", () => {
+  it("turns euros into Twenty's micros and normalises the stage", () => {
+    const body = buildOpportunityBody({ name: "Traject", stage: "meeting", amount: 25000 });
+    expect(body).toMatchObject({
+      name: "Traject",
+      stage: "MEETING",
+      amount: { amountMicros: 25_000_000_000, currencyCode: "EUR" },
+    });
+  });
+
+  // PILOT and VERLOREN are live in CATO; the CLI rejected both until 19-08-2026.
+  it("accepts every stage that actually occurs in the pipeline", () => {
+    for (const stage of ["NEW", "SCREENING", "MEETING", "PROPOSAL", "PILOT", "CUSTOMER", "VERLOREN"]) {
+      expect(buildOpportunityBody({ stage })).toMatchObject({ stage });
+    }
+  });
+
+  it("refuses an unknown stage instead of writing it", () => {
+    expect(() => buildOpportunityBody({ stage: "WON" })).toThrow(RecordWriteError);
+    expect(() => buildOpportunityBody({ stage: "WON" })).toThrow(/Unknown stage/);
+  });
+
+  it("refuses a negative amount and a malformed close date", () => {
+    expect(() => buildOpportunityBody({ amount: -5 })).toThrow(/non-negative/);
+    expect(() => buildOpportunityBody({ closeDate: "26-08-2026" })).toThrow(/YYYY-MM-DD/);
+  });
+
+  it("expands a close date to an ISO timestamp", () => {
+    expect(buildOpportunityBody({ closeDate: "2026-09-30" }))
+      .toMatchObject({ closeDate: "2026-09-30T00:00:00.000Z" });
+  });
+
+  it("refuses an empty write", () => {
+    expect(() => buildOpportunityBody({})).toThrow(/Nothing to write/);
+  });
+});
+
+describe("requireCreateFields for opportunities", () => {
+  it("insists on a company, because a company-less deal is invisible in the pipeline", () => {
+    expect(() => requireCreateFields("opportunities", { name: "X", stage: "MEETING" }))
+      .toThrow(/--company-id/);
+  });
+
+  it("insists on a name and a stage", () => {
+    expect(() => requireCreateFields("opportunities", { companyId: "c-1", stage: "MEETING" }))
+      .toThrow(/--name/);
+    expect(() => requireCreateFields("opportunities", { name: "X", companyId: "c-1" }))
+      .toThrow(/--stage/);
+  });
+
+  it("passes when all three are present", () => {
+    expect(() => requireCreateFields("opportunities", { name: "X", companyId: "c-1", stage: "MEETING" }))
+      .not.toThrow();
+  });
+});
+
+describe("findOpenOpportunities", () => {
+  it("returns only the stages that mean the deal is still running", async () => {
+    const { client } = mockClient({
+      "/rest/opportunities?limit=50&filter=companyId[eq]:c-1": {
+        data: { opportunities: [
+          { id: "o-1", stage: "MEETING", name: "loopt" },
+          { id: "o-2", stage: "CUSTOMER", name: "gewonnen" },
+          { id: "o-3", stage: "VERLOREN", name: "afgeblazen" },
+          { id: "o-4", stage: "PILOT", name: "pilot loopt" },
+        ] },
+      },
+    });
+    const open = await findOpenOpportunities(client, "c-1");
+    expect(open.map((o) => o.id)).toEqual(["o-1", "o-4"]);
+  });
+});
+
+describe("buildNoteBody", () => {
+  it("writes both markdown and blocknote, because the UI renders blocknote", () => {
+    const body = buildNoteBody({ title: "Gesprek", body: "regel een\nregel twee" }) as {
+      title: string; bodyV2: { markdown: string; blocknote: string };
+    };
+    expect(body.title).toBe("Gesprek");
+    expect(body.bodyV2.markdown).toBe("regel een\nregel twee");
+    const blocks = JSON.parse(body.bodyV2.blocknote);
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].content[0].text).toBe("regel een");
+  });
+
+  it("refuses a note without a title or without a body", () => {
+    expect(() => buildNoteBody({ body: "tekst" })).toThrow(/--title/);
+    expect(() => buildNoteBody({ title: "Kop", body: "  " })).toThrow(/--body/);
+  });
+});
+
+describe("createNoteWithTargets", () => {
+  it("creates the note and links it to company and person", async () => {
+    const { client, calls } = mockClient({ "/rest/notes": { data: { createNote: { id: "n-1" } } } });
+    const outcome = await createNoteWithTargets(
+      client, { title: "t" }, { companyId: "c-1", personId: "p-1" }, BASE,
+    );
+    expect(outcome).toMatchObject({ action: "create", object: "notes", id: "n-1" });
+    const targetCalls = calls.filter((c) => c.endpoint === "/rest/noteTargets");
+    expect(targetCalls).toHaveLength(2);
+    expect(targetCalls.map((c) => c.body)).toEqual([
+      { noteId: "n-1", targetPersonId: "p-1" },
+      { noteId: "n-1", targetCompanyId: "c-1" },
+    ]);
+  });
+
+  // A note nobody can find is worse than no note: if the link fails, undo the note.
+  it("removes the note again when linking fails", async () => {
+    const calls: Array<{ endpoint: string; method: string }> = [];
+    const client = {
+      request: async (endpoint: string, opts: { method?: string } = {}) => {
+        calls.push({ endpoint, method: opts.method ?? "GET" });
+        if (endpoint === "/rest/noteTargets") throw new Error("nope");
+        return { data: { createNote: { id: "n-1" } } };
+      },
+    } as never;
+    await expect(createNoteWithTargets(client, { title: "t" }, { companyId: "c-1" }, BASE))
+      .rejects.toThrow(/was removed again/);
+    expect(calls).toContainEqual({ endpoint: "/rest/notes/n-1", method: "DELETE" });
   });
 });

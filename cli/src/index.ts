@@ -138,12 +138,75 @@ async function runRecordCommand(
   const baseUrl = ctx.baseUrl ?? DEFAULT_BASE_URL;
 
   if (sub === "create" || sub === "update" || sub === "delete") {
-    if (objectPath !== "people" && objectPath !== "companies") {
-      throw new CliError(`cato ${objectPath} ${sub} is not supported.`);
+    if (objectPath === "notes" && sub !== "create") {
+      throw new CliError(`cato notes ${sub} is not supported.`);
+    }
+    if (objectPath === "opportunities" && sub === "delete") {
+      throw new CliError("cato opportunities delete is not supported — move the stage to VERLOREN instead.");
     }
     const gate = resolveWriteGate(flags);
     if (gate.blockedReason) throw new CliError(gate.blockedReason);
     const id = positionals[0];
+
+    if (objectPath === "opportunities") {
+      const oppFlags: write.OpportunityFlags = {
+        name: flagString(flags, "name"), stage: flagString(flags, "stage"),
+        amount: flagNumber(flags, "amount"), closeDate: flagString(flags, "close-date"),
+        companyId: flagString(flags, "company-id"),
+        pointOfContactId: flagString(flags, "point-of-contact-id"),
+      };
+      if (sub === "create") write.requireCreateFields(objectPath, oppFlags);
+      else if (!id) throw new CliError("cato opportunities update needs an opportunity id.");
+
+      // One open deal per company unless the caller insists.
+      if (sub === "create" && !flagBool(flags, "force")) {
+        const open = await write.findOpenOpportunities(client, oppFlags.companyId!);
+        if (open.length > 0) {
+          const lines = open.map((o) => `  ${o.id}  ${o.stage}  ${o.name}`).join("\n");
+          throw new CliError(
+            `This company already has an open opportunity — don't stack a second one:\n${lines}\n` +
+            `Move that one instead: cato opportunities update <id> --stage ${oppFlags.stage} --no-dry-run --yes\n` +
+            `Pass --force if this really is a separate track.`,
+          );
+        }
+      }
+
+      const oppBody = write.buildOpportunityBody(oppFlags);
+      if (gate.dryRun) { out(write.renderWriteDryRun(sub, objectPath, oppBody, id)); return 0; }
+      const outcome = sub === "create"
+        ? await write.createRecord(client, objectPath, oppBody, baseUrl)
+        : await write.updateRecord(client, objectPath, id!, oppBody, baseUrl);
+      out(JSON.stringify(outcome, null, 2));
+      return 0;
+    }
+
+    if (objectPath === "notes") {
+      const bodyFile = flagString(flags, "body-file");
+      let noteText = flagString(flags, "body");
+      if (bodyFile) {
+        try {
+          // A file almost always ends in a newline; without trimming that becomes
+          // an empty trailing paragraph in the CRM.
+          noteText = (await Bun.file(bodyFile).text()).replace(/\s+$/, "");
+        } catch {
+          throw new CliError(`Cannot read --body-file '${bodyFile}'.`);
+        }
+      }
+      const noteFlags: write.NoteFlags = {
+        title: flagString(flags, "title"), body: noteText,
+        companyId: flagString(flags, "company-id"), personId: flagString(flags, "person-id"),
+      };
+      if (!noteFlags.companyId && !noteFlags.personId) {
+        throw new CliError("cato notes create needs --company-id and/or --person-id — an unattached note is unfindable.");
+      }
+      const noteBody = write.buildNoteBody(noteFlags);
+      if (gate.dryRun) { out(write.renderWriteDryRun("create", objectPath, noteBody)); return 0; }
+      out(JSON.stringify(
+        await write.createNoteWithTargets(client, noteBody,
+          { companyId: noteFlags.companyId, personId: noteFlags.personId }, baseUrl),
+        null, 2));
+      return 0;
+    }
 
     if (sub === "delete") {
       if (!id) throw new CliError(`cato ${objectPath} delete needs a record id.`);

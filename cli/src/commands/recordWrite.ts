@@ -1,18 +1,29 @@
-// Write path for the core CRM objects: people and companies.
+// Write path for the CRM objects the CLI can change: people, companies,
+// opportunities and notes.
 //
-// Twenty stores names, emails and phones as composite fields; `transformPersonData`
-// and `transformCompanyData` in core do that mapping, so the CLI takes flat
-// flags and never asks anyone to hand-write a composite object.
+// Twenty stores names, emails, phones, money and rich text as composite fields;
+// `transformPersonData`, `transformCompanyData` and `transformBodyField` in core
+// do that mapping, so the CLI takes flat flags and never asks anyone to
+// hand-write a composite object.
 
 import type { RestClient } from "@twenty-crm/core";
-import { transformCompanyData, transformPersonData } from "@twenty-crm/core";
+import {
+  createTargetsForRecord, extractId, transformBodyField,
+  transformCompanyData, transformPersonData,
+} from "@twenty-crm/core";
+import { OPPORTUNITY_STAGE_VALUES } from "../filters.ts";
 import { recordUrl } from "../urls.ts";
 
 export class RecordWriteError extends Error {}
 
-export type WritableObject = "people" | "companies";
+export type WritableObject = "people" | "companies" | "opportunities" | "notes";
 
-const SINGULAR: Record<WritableObject, string> = { people: "person", companies: "company" };
+const SINGULAR: Record<WritableObject, string> = {
+  people: "person", companies: "company", opportunities: "opportunity", notes: "note",
+};
+
+/** Stages that mean "this deal is still running" — used by the create guard below. */
+export const OPEN_STAGES = ["NEW", "SCREENING", "MEETING", "PROPOSAL", "PILOT"] as const;
 
 export interface PersonFlags {
   firstName?: string; lastName?: string; email?: string; phone?: string;
@@ -25,8 +36,17 @@ export interface CompanyFlags {
   branche?: string; accountOwnerId?: string;
 }
 
+export interface OpportunityFlags {
+  name?: string; stage?: string; amount?: number; closeDate?: string;
+  companyId?: string; pointOfContactId?: string;
+}
+
+export interface NoteFlags {
+  title?: string; body?: string; companyId?: string; personId?: string;
+}
+
 /** Drops undefined/blank flags so an update never blanks a field by accident. */
-function present(input: PersonFlags | CompanyFlags): Record<string, unknown> {
+function present(input: PersonFlags | CompanyFlags | OpportunityFlags): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input)) {
     if (v === undefined || v === null) continue;
@@ -52,12 +72,111 @@ export function buildCompanyBody(flags: CompanyFlags): Record<string, unknown> {
   return transformCompanyData(cleaned as never);
 }
 
-export function requireCreateFields(object: WritableObject, flags: PersonFlags & CompanyFlags): void {
+/** €25.000 on the command line is 25_000_000_000 micros in Twenty. */
+export function eurToMicros(amount: number): number {
+  return Math.round(amount * 1_000_000);
+}
+
+export function buildOpportunityBody(flags: OpportunityFlags): Record<string, unknown> {
+  const cleaned = present(flags) as OpportunityFlags;
+  if (Object.keys(cleaned).length === 0) {
+    throw new RecordWriteError("Nothing to write: pass at least one field.");
+  }
+  const body: Record<string, unknown> = {};
+  if (cleaned.name) body.name = cleaned.name;
+  if (cleaned.companyId) body.companyId = cleaned.companyId;
+  if (cleaned.pointOfContactId) body.pointOfContactId = cleaned.pointOfContactId;
+  if (cleaned.stage) {
+    const stage = cleaned.stage.toUpperCase();
+    if (!(OPPORTUNITY_STAGE_VALUES as readonly string[]).includes(stage)) {
+      throw new RecordWriteError(
+        `Unknown stage '${cleaned.stage}'. One of: ${OPPORTUNITY_STAGE_VALUES.join(", ")}.`,
+      );
+    }
+    body.stage = stage;
+  }
+  if (cleaned.amount !== undefined) {
+    if (!Number.isFinite(cleaned.amount) || cleaned.amount < 0) {
+      throw new RecordWriteError("--amount must be a non-negative number of euros.");
+    }
+    body.amount = { amountMicros: eurToMicros(cleaned.amount), currencyCode: "EUR" };
+  }
+  if (cleaned.closeDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cleaned.closeDate)) {
+      throw new RecordWriteError("--close-date must be YYYY-MM-DD.");
+    }
+    body.closeDate = `${cleaned.closeDate}T00:00:00.000Z`;
+  }
+  return body;
+}
+
+export function buildNoteBody(flags: NoteFlags): Record<string, unknown> {
+  if (!flags.title?.trim()) throw new RecordWriteError("cato notes create needs --title.");
+  if (flags.body === undefined || flags.body.trim() === "") {
+    throw new RecordWriteError("cato notes create needs --body or --body-file.");
+  }
+  return transformBodyField({ title: flags.title, body: flags.body });
+}
+
+/**
+ * One open opportunity per company. Three cards for one deal is the failure mode
+ * this guard exists for; `--force` is the escape hatch for a genuinely second
+ * track running alongside the first.
+ */
+export async function findOpenOpportunities(
+  client: RestClient, companyId: string,
+): Promise<Array<{ id: string; stage: string; name: string }>> {
+  const result = await client.request<{
+    data?: { opportunities?: Array<{ id: string; stage: string; name: string }> };
+  }>(`/rest/opportunities?limit=50&filter=companyId[eq]:${companyId}`);
+  const all = result?.data?.opportunities ?? [];
+  return all.filter((o) => (OPEN_STAGES as readonly string[]).includes(o.stage));
+}
+
+/**
+ * A note without a target is unfindable clutter in the CRM, so the link is part
+ * of creating it: if linking fails the note is removed again.
+ */
+export async function createNoteWithTargets(
+  client: RestClient,
+  body: Record<string, unknown>,
+  targets: { companyId?: string; personId?: string },
+  baseUrl: string,
+): Promise<WriteOutcome> {
+  const created = await client.request(`/rest/notes`, { method: "POST", body });
+  const id = extractId(created);
+  if (!id) throw new RecordWriteError("Creating the note failed: no id came back.");
+  try {
+    await createTargetsForRecord(
+      client, "note", id,
+      targets.personId ? [targets.personId] : [],
+      targets.companyId ? [targets.companyId] : [],
+    );
+  } catch (err) {
+    await client.request(`/rest/notes/${id}`, { method: "DELETE" }).catch(() => {});
+    throw new RecordWriteError(
+      `Linking the note to its record failed, so note ${id} was removed again: ${String(err)}`,
+    );
+  }
+  return { action: "create", object: "notes", id, url: recordUrl(baseUrl, "note", id) };
+}
+
+export function requireCreateFields(
+  object: WritableObject,
+  flags: PersonFlags & CompanyFlags & OpportunityFlags,
+): void {
   if (object === "companies" && !flags.name?.trim()) {
     throw new RecordWriteError("cato companies create needs --name.");
   }
   if (object === "people" && !flags.firstName?.trim() && !flags.lastName?.trim() && !flags.email?.trim()) {
     throw new RecordWriteError("cato people create needs at least --first-name, --last-name or --email.");
+  }
+  if (object === "opportunities") {
+    if (!flags.name?.trim()) throw new RecordWriteError("cato opportunities create needs --name.");
+    if (!flags.companyId?.trim()) {
+      throw new RecordWriteError("cato opportunities create needs --company-id — an opportunity without a company is invisible in the pipeline.");
+    }
+    if (!flags.stage?.trim()) throw new RecordWriteError("cato opportunities create needs --stage.");
   }
 }
 

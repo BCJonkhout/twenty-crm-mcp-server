@@ -7,8 +7,8 @@ import { BRANCHE_VALUES, OPPORTUNITY_STAGE_VALUES, PRODUCT_VALUES, SALES_STATUS_
 export const COMMAND_TREE: Record<string, readonly string[]> = {
   people: ["list", "get", "search", "create", "update", "delete", "history"],
   companies: ["list", "get", "search", "create", "update", "delete"],
-  opportunities: ["list"],
-  notes: ["list"],
+  opportunities: ["list", "create", "update"],
+  notes: ["list", "create"],
   segments: ["build"],
   import: [],
   auth: ["create", "set", "list", "revoke", "status", "whoami", "roles"],
@@ -112,6 +112,24 @@ const RECORD_WRITE_FLAGS: FlagSpecs = {
   "account-owner-id": { type: "string", placeholder: "<uuid>", description: "Company account owner." },
 };
 
+const OPPORTUNITY_WRITE_FLAGS: FlagSpecs = {
+  name: { type: "string", placeholder: "<text>", description: "Opportunity name — what the deal is." },
+  stage: { type: "string", placeholder: "<value>", description: `One of: ${OPPORTUNITY_STAGE_VALUES.join(", ")}.` },
+  amount: { type: "number", placeholder: "<eur>", description: "Expected value in euros (stored as micros)." },
+  "close-date": { type: "string", placeholder: "<YYYY-MM-DD>", description: "Expected close date." },
+  "company-id": { type: "string", placeholder: "<uuid>", description: "Company the deal belongs to (required on create)." },
+  "point-of-contact-id": { type: "string", placeholder: "<uuid>", description: "Person who is the contact for this deal." },
+  force: { type: "boolean", description: "Create a second open opportunity on a company that already has one." },
+};
+
+const NOTE_WRITE_FLAGS: FlagSpecs = {
+  title: { type: "string", placeholder: "<text>", description: "Note title." },
+  body: { type: "string", placeholder: "<text>", description: "Note body (markdown). Use --body-file for anything longer than a line." },
+  "body-file": { type: "string", placeholder: "<path>", description: "Read the note body from a file." },
+  "company-id": { type: "string", placeholder: "<uuid>", description: "Attach the note to this company." },
+  "person-id": { type: "string", placeholder: "<uuid>", description: "Attach the note to this person." },
+};
+
 const IMPORT_FLAGS: FlagSpecs = {
   csv: { type: "string", placeholder: "<path>", description: "CSV file to analyse." },
   object: { type: "string", placeholder: "<people|companies>", description: "Target object (default: people)." },
@@ -168,8 +186,10 @@ export function flagSpecsFor(command: readonly string[]): FlagSpecs {
       if (sub === "create" || sub === "update" || sub === "delete") return RECORD_WRITE_FLAGS;
       return { ...COMMON_READ_FLAGS, ...COMPANY_FILTER_FLAGS, ...(sub === "search" ? SEARCH_FLAGS : {}) };
     case "opportunities":
+      if (sub === "create" || sub === "update") return OPPORTUNITY_WRITE_FLAGS;
       return { ...COMMON_READ_FLAGS, ...OPPORTUNITY_FILTER_FLAGS };
     case "notes":
+      if (sub === "create") return NOTE_WRITE_FLAGS;
       return { ...COMMON_READ_FLAGS, ...NOTE_FILTER_FLAGS };
     case "segments":
       return SEGMENT_FLAGS;
@@ -192,7 +212,10 @@ export const COMMAND_SUMMARIES: Record<string, string> = {
   "companies get": "Fetch one company by id.",
   "companies search": "Search companies by name or domain (case-insensitive substring).",
   "opportunities list": "List opportunities (pipeline).",
+  "opportunities create": "Create an opportunity on a company. Refuses a second open one unless --force. Needs --no-dry-run --yes.",
+  "opportunities update": "Update an opportunity by id — move its stage, set the amount. Needs --no-dry-run --yes.",
   "notes list": "List notes.",
+  "notes create": "Create a note and attach it to a company and/or person. Needs --no-dry-run --yes.",
   "segments build": "Build a target-audience selection from filters and write it out as JSON/CSV.",
   import: "Analyse a CSV; with --source-system also tag/create companies. Needs --no-dry-run --yes.",
   "people create": "Create a person. Inherits the company's account owner so the record stays visible.",
