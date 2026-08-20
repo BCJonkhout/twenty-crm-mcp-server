@@ -22,8 +22,12 @@ const SINGULAR: Record<WritableObject, string> = {
   people: "person", companies: "company", opportunities: "opportunity", notes: "note",
 };
 
-/** Stages that mean "this deal is still running" — used by the create guard below. */
-export const OPEN_STAGES = ["NEW", "SCREENING", "MEETING", "PROPOSAL", "PILOT"] as const;
+/**
+ * Stages that mean "this deal is still running" — used by the create guard below.
+ * ON_HOLD counts as open: a parked deal is paused, not closed, so a second
+ * opportunity next to it would fragment the same deal across two records.
+ */
+export const OPEN_STAGES = ["NEW", "SCREENING", "MEETING", "PROPOSAL", "PILOT", "ON_HOLD"] as const;
 
 export interface PersonFlags {
   firstName?: string; lastName?: string; email?: string; phone?: string;

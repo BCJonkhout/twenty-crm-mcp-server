@@ -144,7 +144,7 @@ describe("buildOpportunityBody", () => {
 
   // PILOT and VERLOREN are live in CATO; the CLI rejected both until 19-08-2026.
   it("accepts every stage that actually occurs in the pipeline", () => {
-    for (const stage of ["NEW", "SCREENING", "MEETING", "PROPOSAL", "PILOT", "CUSTOMER", "VERLOREN"]) {
+    for (const stage of ["NEW", "SCREENING", "MEETING", "PROPOSAL", "PILOT", "ON_HOLD", "CUSTOMER", "VERLOREN"]) {
       expect(buildOpportunityBody({ stage })).toMatchObject({ stage });
     }
   });
@@ -197,11 +197,12 @@ describe("findOpenOpportunities", () => {
           { id: "o-2", stage: "CUSTOMER", name: "gewonnen" },
           { id: "o-3", stage: "VERLOREN", name: "afgeblazen" },
           { id: "o-4", stage: "PILOT", name: "pilot loopt" },
+          { id: "o-5", stage: "ON_HOLD", name: "geparkeerd, niet gesloten" },
         ] },
       },
     });
     const open = await findOpenOpportunities(client, "c-1");
-    expect(open.map((o) => o.id)).toEqual(["o-1", "o-4"]);
+    expect(open.map((o) => o.id)).toEqual(["o-1", "o-4", "o-5"]);
   });
 });
 

@@ -2777,6 +2777,19 @@ components:
                   label:
                     type: string
           description: Meet Link
+        transcript:
+          type: string
+          description: Verbatim transcript of the online meeting
+        transcriptSyncedAt:
+          type: string
+          format: date-time
+          description: When this event was last checked for a transcript
+        transcriptSummary:
+          type: string
+          description: Short summary of what was discussed and agreed
+        isExternal:
+          type: boolean
+          description: Whether someone outside the organization took part
         calendarChannelEventAssociations:
           type: array
           items:
@@ -3021,15 +3034,6 @@ components:
         accountOwnerId:
           type: string
           format: uuid
-        prudaiMarketingProductTarget:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        prudaiMarketingSignalScore:
-          type: integer
-          description: debug
-        prudaiMarketingPlaybook:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingTrialState:
           type: string
           description: debug
@@ -3043,6 +3047,15 @@ components:
         prudaiMarketingN8nId:
           type: string
           description: debug
+        prudaiMarketingSignalScore:
+          type: integer
+          description: debug
+        prudaiMarketingProductTarget:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingPlaybook:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingSuppressionFlags:
           type: object
           description: debug
@@ -3052,12 +3065,6 @@ components:
         prudaiMarketingSendgridCategory:
           type: string
           description: debug
-        prudaiMarketingSourceInventoryId:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        prudaiMarketingSourceSystem:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         marketingSelection:
           type: string
         product:
@@ -3080,6 +3087,9 @@ components:
           enum:
             - MARKETING
             - RESTRICTED
+        prudaiMarketingSourceSystem:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         isenriched:
           type: boolean
         annualRecurringRevenue:
@@ -3090,14 +3100,8 @@ components:
             currencyCode:
               type: string
           description: "Annual Recurring Revenue: The actual or estimated annual revenue of the company"
-        prudaiMarketingProductInterestSummary:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingSourceContext:
           type: object
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        prudaiMarketingSourceSegment:
-          type: string
           description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingPrimaryPhone:
           type: string
@@ -3112,6 +3116,12 @@ components:
           type: string
           format: date-time
           description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingProductInterestSummary:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSourceSegment:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         branche:
           type: string
           enum:
@@ -3119,27 +3129,39 @@ components:
             - ARCHITECTUUR
             - OVERHEID
             - WONINGCORPORATIE
+        klantstatus:
+          type: string
+          enum:
+            - KLANT
+            - PILOT
+            - PARTNER
+            - OPGEZEGD
+          description: "Gebruikt onze systemen? Afgeleid uit account-dashboard entitlements (17-08-2026). Klant = betaalt, Pilot = gratis proefperiode."
+        prudaiMarketingSourceInventoryId:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
       example:
         name: Company name
         domainName:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://worthy-pomelo.biz"
+          primaryLinkUrl: "https://muffled-hovercraft.net/"
           secondaryLinks: []
         linkedinLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://puzzled-obligation.info/"
+          primaryLinkUrl: "https://tattered-bowling.biz/"
           secondaryLinks: []
         xLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://sick-papa.name/"
+          primaryLinkUrl: "https://near-event.org"
           secondaryLinks: []
         product:
           - LEO
         visibility: MARKETING
         annualRecurringRevenue:
-          amountMicros: "508000000"
+          amountMicros: "380000000"
           currencyCode: EUR
         branche: ADVOCATUUR
+        klantstatus: KLANT
     CompanyForResponse:
       type: object
       description: A company
@@ -3294,15 +3316,6 @@ components:
         accountOwnerId:
           type: string
           format: uuid
-        prudaiMarketingProductTarget:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        prudaiMarketingSignalScore:
-          type: integer
-          description: debug
-        prudaiMarketingPlaybook:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingTrialState:
           type: string
           description: debug
@@ -3316,6 +3329,15 @@ components:
         prudaiMarketingN8nId:
           type: string
           description: debug
+        prudaiMarketingSignalScore:
+          type: integer
+          description: debug
+        prudaiMarketingProductTarget:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingPlaybook:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingSuppressionFlags:
           type: object
           description: debug
@@ -3325,12 +3347,6 @@ components:
         prudaiMarketingSendgridCategory:
           type: string
           description: debug
-        prudaiMarketingSourceInventoryId:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        prudaiMarketingSourceSystem:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         marketingSelection:
           type: string
         product:
@@ -3353,6 +3369,9 @@ components:
           enum:
             - MARKETING
             - RESTRICTED
+        prudaiMarketingSourceSystem:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         isenriched:
           type: boolean
         annualRecurringRevenue:
@@ -3363,14 +3382,8 @@ components:
             currencyCode:
               type: string
           description: "Annual Recurring Revenue: The actual or estimated annual revenue of the company"
-        prudaiMarketingProductInterestSummary:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingSourceContext:
           type: object
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        prudaiMarketingSourceSegment:
-          type: string
           description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingPrimaryPhone:
           type: string
@@ -3385,6 +3398,12 @@ components:
           type: string
           format: date-time
           description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingProductInterestSummary:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSourceSegment:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         branche:
           type: string
           enum:
@@ -3392,6 +3411,17 @@ components:
             - ARCHITECTUUR
             - OVERHEID
             - WONINGCORPORATIE
+        klantstatus:
+          type: string
+          enum:
+            - KLANT
+            - PILOT
+            - PARTNER
+            - OPGEZEGD
+          description: "Gebruikt onze systemen? Afgeleid uit account-dashboard entitlements (17-08-2026). Klant = betaalt, Pilot = gratis proefperiode."
+        prudaiMarketingSourceInventoryId:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         attachments:
           type: array
           items:
@@ -3565,15 +3595,6 @@ components:
         accountOwnerId:
           type: string
           format: uuid
-        prudaiMarketingProductTarget:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        prudaiMarketingSignalScore:
-          type: integer
-          description: debug
-        prudaiMarketingPlaybook:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingTrialState:
           type: string
           description: debug
@@ -3587,6 +3608,15 @@ components:
         prudaiMarketingN8nId:
           type: string
           description: debug
+        prudaiMarketingSignalScore:
+          type: integer
+          description: debug
+        prudaiMarketingProductTarget:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingPlaybook:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingSuppressionFlags:
           type: object
           description: debug
@@ -3596,12 +3626,6 @@ components:
         prudaiMarketingSendgridCategory:
           type: string
           description: debug
-        prudaiMarketingSourceInventoryId:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        prudaiMarketingSourceSystem:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         marketingSelection:
           type: string
         product:
@@ -3624,6 +3648,9 @@ components:
           enum:
             - MARKETING
             - RESTRICTED
+        prudaiMarketingSourceSystem:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         isenriched:
           type: boolean
         annualRecurringRevenue:
@@ -3634,14 +3661,8 @@ components:
             currencyCode:
               type: string
           description: "Annual Recurring Revenue: The actual or estimated annual revenue of the company"
-        prudaiMarketingProductInterestSummary:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingSourceContext:
           type: object
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        prudaiMarketingSourceSegment:
-          type: string
           description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingPrimaryPhone:
           type: string
@@ -3656,6 +3677,12 @@ components:
           type: string
           format: date-time
           description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingProductInterestSummary:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSourceSegment:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         branche:
           type: string
           enum:
@@ -3663,27 +3690,39 @@ components:
             - ARCHITECTUUR
             - OVERHEID
             - WONINGCORPORATIE
+        klantstatus:
+          type: string
+          enum:
+            - KLANT
+            - PILOT
+            - PARTNER
+            - OPGEZEGD
+          description: "Gebruikt onze systemen? Afgeleid uit account-dashboard entitlements (17-08-2026). Klant = betaalt, Pilot = gratis proefperiode."
+        prudaiMarketingSourceInventoryId:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
       example:
         name: Company name
         domainName:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://remarkable-angle.com/"
+          primaryLinkUrl: "https://waterlogged-premeditation.info/"
           secondaryLinks: []
         linkedinLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://naughty-slipper.biz"
+          primaryLinkUrl: "https://slight-pasta.com"
           secondaryLinks: []
         xLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://magnificent-cauliflower.biz"
+          primaryLinkUrl: "https://lined-pecan.com"
           secondaryLinks: []
         product:
           - LEO
         visibility: MARKETING
         annualRecurringRevenue:
-          amountMicros: "796000000"
+          amountMicros: "542000000"
           currencyCode: EUR
         branche: ADVOCATUUR
+        klantstatus: KLANT
     ConnectedAccountForResponse:
       type: object
       description: A connected account
@@ -5181,15 +5220,6 @@ components:
           type: string
           format: date-time
           description: Opportunity close date
-        stage:
-          type: string
-          enum:
-            - NEW
-            - SCREENING
-            - MEETING
-            - PROPOSAL
-            - CUSTOMER
-          description: Opportunity stage
         position:
           type: number
           description: Opportunity record position
@@ -5257,12 +5287,24 @@ components:
         prudaiMarketingHandoffCampaign:
           type: string
           description: Managed by marketing-dashboard for Twenty CRM sync.
+        stage:
+          type: string
+          enum:
+            - NEW
+            - PILOT
+            - SCREENING
+            - MEETING
+            - PROPOSAL
+            - CUSTOMER
+            - VERLOREN
+            - ON_HOLD
+          description: Opportunity stage
       example:
         name: Opportunity name
-        stage: NEW
         amount:
-          amountMicros: "489000000"
+          amountMicros: "574000000"
           currencyCode: EUR
+        stage: NEW
     OpportunityForResponse:
       type: object
       description: An opportunity
@@ -5290,15 +5332,6 @@ components:
           type: string
           format: date-time
           description: Opportunity close date
-        stage:
-          type: string
-          enum:
-            - NEW
-            - SCREENING
-            - MEETING
-            - PROPOSAL
-            - CUSTOMER
-          description: Opportunity stage
         position:
           type: number
           description: Opportunity record position
@@ -5376,6 +5409,18 @@ components:
         prudaiMarketingHandoffCampaign:
           type: string
           description: Managed by marketing-dashboard for Twenty CRM sync.
+        stage:
+          type: string
+          enum:
+            - NEW
+            - PILOT
+            - SCREENING
+            - MEETING
+            - PROPOSAL
+            - CUSTOMER
+            - VERLOREN
+            - ON_HOLD
+          description: Opportunity stage
         attachments:
           type: array
           items:
@@ -5427,15 +5472,6 @@ components:
           type: string
           format: date-time
           description: Opportunity close date
-        stage:
-          type: string
-          enum:
-            - NEW
-            - SCREENING
-            - MEETING
-            - PROPOSAL
-            - CUSTOMER
-          description: Opportunity stage
         position:
           type: number
           description: Opportunity record position
@@ -5503,12 +5539,24 @@ components:
         prudaiMarketingHandoffCampaign:
           type: string
           description: Managed by marketing-dashboard for Twenty CRM sync.
+        stage:
+          type: string
+          enum:
+            - NEW
+            - PILOT
+            - SCREENING
+            - MEETING
+            - PROPOSAL
+            - CUSTOMER
+            - VERLOREN
+            - ON_HOLD
+          description: Opportunity stage
       example:
         name: Opportunity name
-        stage: NEW
         amount:
-          amountMicros: "117000000"
+          amountMicros: "910000000"
           currencyCode: EUR
+        stage: NEW
     Person:
       type: object
       description: A person
@@ -5628,12 +5676,6 @@ components:
         companyId:
           type: string
           format: uuid
-        prudaiMarketingSignalScore:
-          type: integer
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        prudaiMarketingLegacyHubspotId:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingLastTouchAt:
           type: string
           format: date-time
@@ -5665,6 +5707,12 @@ components:
         prudaiMarketingSourceSystem:
           type: string
           description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSignalScore:
+          type: integer
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingLegacyHubspotId:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         visibility:
           type: string
           enum:
@@ -5694,13 +5742,6 @@ components:
           format: date-time
         isenriched:
           type: boolean
-        doNotContact:
-          type: boolean
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        marketingOptOutAt:
-          type: string
-          format: date-time
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         assigneeId:
           type: string
           format: uuid
@@ -5735,6 +5776,13 @@ components:
         prudaiMarketingStatus:
           type: string
           description: Managed by marketing-dashboard for Twenty CRM sync.
+        doNotContact:
+          type: boolean
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        marketingOptOutAt:
+          type: string
+          format: date-time
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         salesStatus:
           type: string
           enum:
@@ -5765,18 +5813,18 @@ components:
           description: "Contact's phone numbers"
       example:
         name:
-          firstName: Morgan
-          lastName: Lehner
+          firstName: Bria
+          lastName: Little
         emails:
-          primaryEmail: "carmen4@hotmail.com"
+          primaryEmail: "bulah_lockman72@yahoo.com"
           additionalEmails: null
         linkedinLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://foolish-hyphenation.com"
+          primaryLinkUrl: "https://untrue-seafood.com"
           secondaryLinks: []
         xLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://caring-sticker.net"
+          primaryLinkUrl: "https://personal-leading.net"
           secondaryLinks: []
         visibility: MARKETING
         product:
@@ -5937,12 +5985,6 @@ components:
         companyId:
           type: string
           format: uuid
-        prudaiMarketingSignalScore:
-          type: integer
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        prudaiMarketingLegacyHubspotId:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingLastTouchAt:
           type: string
           format: date-time
@@ -5974,6 +6016,12 @@ components:
         prudaiMarketingSourceSystem:
           type: string
           description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSignalScore:
+          type: integer
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingLegacyHubspotId:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         visibility:
           type: string
           enum:
@@ -6003,13 +6051,6 @@ components:
           format: date-time
         isenriched:
           type: boolean
-        doNotContact:
-          type: boolean
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        marketingOptOutAt:
-          type: string
-          format: date-time
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         assigneeId:
           type: string
           format: uuid
@@ -6043,6 +6084,13 @@ components:
           description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingStatus:
           type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        doNotContact:
+          type: boolean
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        marketingOptOutAt:
+          type: string
+          format: date-time
           description: Managed by marketing-dashboard for Twenty CRM sync.
         salesStatus:
           type: string
@@ -6241,12 +6289,6 @@ components:
         companyId:
           type: string
           format: uuid
-        prudaiMarketingSignalScore:
-          type: integer
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        prudaiMarketingLegacyHubspotId:
-          type: string
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         prudaiMarketingLastTouchAt:
           type: string
           format: date-time
@@ -6278,6 +6320,12 @@ components:
         prudaiMarketingSourceSystem:
           type: string
           description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingSignalScore:
+          type: integer
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        prudaiMarketingLegacyHubspotId:
+          type: string
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         visibility:
           type: string
           enum:
@@ -6307,13 +6355,6 @@ components:
           format: date-time
         isenriched:
           type: boolean
-        doNotContact:
-          type: boolean
-          description: Managed by marketing-dashboard for Twenty CRM sync.
-        marketingOptOutAt:
-          type: string
-          format: date-time
-          description: Managed by marketing-dashboard for Twenty CRM sync.
         assigneeId:
           type: string
           format: uuid
@@ -6348,6 +6389,13 @@ components:
         prudaiMarketingStatus:
           type: string
           description: Managed by marketing-dashboard for Twenty CRM sync.
+        doNotContact:
+          type: boolean
+          description: Managed by marketing-dashboard for Twenty CRM sync.
+        marketingOptOutAt:
+          type: string
+          format: date-time
+          description: Managed by marketing-dashboard for Twenty CRM sync.
         salesStatus:
           type: string
           enum:
@@ -6378,18 +6426,18 @@ components:
           description: "Contact's phone numbers"
       example:
         name:
-          firstName: Jay
-          lastName: Reichel-Orn
+          firstName: Eve
+          lastName: McGlynn
         emails:
-          primaryEmail: "ardella90@hotmail.com"
+          primaryEmail: "ewell.kemmer94@yahoo.com"
           additionalEmails: null
         linkedinLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://smooth-freight.net"
+          primaryLinkUrl: "https://impossible-priesthood.com"
           secondaryLinks: []
         xLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://tame-mortise.com/"
+          primaryLinkUrl: "https://fussy-ferret.biz"
           secondaryLinks: []
         visibility: MARKETING
         product:

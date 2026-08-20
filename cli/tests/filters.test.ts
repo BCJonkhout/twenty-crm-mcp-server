@@ -93,6 +93,7 @@ describe("buildOpportunityFilter / buildNoteFilter", () => {
   it("accepts the stages that were missing from the enum until 19-08-2026", () => {
     expect(buildOpportunityFilter({ stage: "PILOT" })!).toContain('stage[eq]:"PILOT"');
     expect(buildOpportunityFilter({ stage: "verloren" })!).toContain('stage[eq]:"VERLOREN"');
+    expect(buildOpportunityFilter({ stage: "on_hold" })!).toContain('stage[eq]:"ON_HOLD"');
   });
 
   it("filters notes on title", () => {
