@@ -236,3 +236,43 @@ export function renderWriteDryRun(action: string, detail: string[], affected?: n
   lines.push("", "Re-run with --no-dry-run --yes to apply.");
   return lines.join("\n");
 }
+
+/**
+ * Wat een geslaagde marketing-schrijfactie terugmeldt.
+ *
+ * Deze endpoints geven twee vormen terug: een plat count-object
+ * (`{addedCount, restoredCount, skippedCount}`) of het volledige campagne-object
+ * (~30 velden). Allebei werden ze ongefilterd als JSON de terminal in gekieperd,
+ * terwijl de dry-run ernaast een nette zin gaf. De ruwe payload blijft
+ * beschikbaar achter `--json`; dit is wat je zonder die vlag te zien krijgt.
+ */
+export function renderActionResult(action: string, payload: unknown): string {
+  const lines = [action];
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const obj = payload as Record<string, unknown>;
+
+    // Een campagne-object draagt óók *Count-velden (memberCount, …). Na een
+    // archive wil je de status zien, niet "member 0, linked person 0", dus de
+    // entiteit wint van de counts zodra er een id én een naam in zitten.
+    const isEntity = typeof obj.id === "string" && typeof obj.name === "string";
+
+    const counts = Object.entries(obj).filter(
+      ([k, v]) => k.endsWith("Count") && typeof v === "number",
+    );
+    if (!isEntity && counts.length > 0) {
+      const parts = counts.map(([k, v]) => {
+        const word = k.slice(0, -"Count".length).replace(/([A-Z])/g, " $1").toLowerCase();
+        return `${word.trim()} ${v as number}`;
+      });
+      lines.push(`  ${parts.join(", ")}`);
+      return lines.join("\n");
+    }
+
+    if (typeof obj.name === "string") lines.push(`  name: ${obj.name}`);
+    for (const key of ["status", "contactResearchStatus", "sendBatchStatus"]) {
+      if (typeof obj[key] === "string") lines.push(`  ${key}: ${obj[key] as string}`);
+    }
+    if (typeof obj.isEnabled === "boolean") lines.push(`  enabled: ${obj.isEnabled}`);
+  }
+  return lines.join("\n");
+}

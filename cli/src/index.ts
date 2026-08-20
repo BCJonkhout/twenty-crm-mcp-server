@@ -781,6 +781,14 @@ async function runMarketing(
     return g;
   };
   const show = (v: unknown) => out(JSON.stringify(v, null, 2));
+  // Schrijfacties volgen dezelfde regel als de rest van de CLI: machine-formaat
+  // als erom gevraagd is, anders een leesbare bevestiging. Deze endpoints geven
+  // een object terug (counts of de campagne), geen rijen — `--csv` levert daarom
+  // dezelfde JSON op als `--json` in plaats van stilzwijgend genegeerd te worden.
+  const done = (action: string, payload: unknown): void => {
+    if (ctx.json || ctx.csv) { show(payload); return; }
+    out(api.renderActionResult(action, payload));
+  };
   const campaignUrl = () => marketingUrl(ctx.baseUrl ?? DEFAULT_BASE_URL, campaignId);
 
   if (sub === "access") { show(await marketing.getAccess(client)); return 0; }
@@ -797,12 +805,12 @@ async function runMarketing(
       const type = flagString(flags, "type");
       if (!type) throw new CliError("cato marketing assets create needs --type <text>.");
       if (g.dryRun) { out(api.renderWriteDryRun(`create ${type} asset`, [JSON.stringify(body)])); return 0; }
-      show(await api.createAsset(client, type, body)); return 0;
+      done(`Created ${type} asset.`, await api.createAsset(client, type, body)); return 0;
     }
     const assetId = flagString(flags, "asset");
     if (!assetId) throw new CliError("cato marketing assets update needs --asset <uuid>.");
     if (g.dryRun) { out(api.renderWriteDryRun("update asset", [assetId, JSON.stringify(body)])); return 0; }
-    show(await api.updateAsset(client, assetId, body)); return 0;
+    done(`Updated asset ${assetId}.`, await api.updateAsset(client, assetId, body)); return 0;
   }
 
   if (sub === "research") {
@@ -817,11 +825,11 @@ async function runMarketing(
       const targetId = flagString(flags, "target");
       if (!targetId) throw new CliError("cato marketing research target needs --target <uuid>.");
       if (g.dryRun) { out(api.renderWriteDryRun("research", [`Target: ${targetId}`], 1)); return 0; }
-      show(await api.researchTarget(client, campaignId, targetId)); return 0;
+      done(`Researched target ${targetId}.`, await api.researchTarget(client, campaignId, targetId)); return 0;
     }
     if (verb === "stop") {
       if (g.dryRun) { out(api.renderWriteDryRun("stop research", [`Campaign: ${campaignId}`])); return 0; }
-      show(await api.stopResearch(client, campaignId)); return 0;
+      done("Stopped contact research.", await api.stopResearch(client, campaignId)); return 0;
     }
     const progress = api.summariseResearch(await api.listTargets(client, campaignId));
     if (g.dryRun) {
@@ -832,7 +840,7 @@ async function runMarketing(
       ], progress.outstanding || progress.total));
       return 0;
     }
-    show(await api.startResearch(client, campaignId));
+    done("Started contact research.", await api.startResearch(client, campaignId));
     out(`\nStarted over ${progress.total} target(s). Follow with: cato marketing research status --campaign ${campaignId}`);
     return 0;
   }
@@ -911,18 +919,19 @@ async function runMarketing(
         branche: flagString(flags, "branche"),
       });
       if (g.dryRun) { out(build.renderAudienceDryRun(filter, campaignId, "members")); return 0; }
-      show(await api.attachMatchingMembers(client, campaignId, filter)); return 0;
+      done("Attached matching members.", await api.attachMatchingMembers(client, campaignId, filter)); return 0;
     }
     if (verb === "mark-todo") {
       if (g.dryRun) { out(api.renderWriteDryRun("mark members as todo", [`Campaign: ${campaignId}`])); return 0; }
-      show(await api.markMembersAsTodo(client, campaignId)); return 0;
+      done("Marked members as todo.", await api.markMembersAsTodo(client, campaignId)); return 0;
     }
     if (verb === "remove" || verb === "stop") {
       const memberId = flagString(flags, "member");
       if (!memberId) throw new CliError(`cato marketing members ${verb} needs --member <uuid>.`);
       if (g.dryRun) { out(api.renderWriteDryRun(verb, [`Member: ${memberId}`], 1)); return 0; }
-      show(verb === "remove" ? await api.removeMember(client, campaignId, memberId)
-                             : await api.stopMember(client, campaignId, memberId));
+      done(`${verb === "remove" ? "Removed" : "Stopped"} member ${memberId}.`,
+        verb === "remove" ? await api.removeMember(client, campaignId, memberId)
+                          : await api.stopMember(client, campaignId, memberId));
       return 0;
     }
     const ids = api.requireIds(flagString(flags, "ids"), "person");
@@ -945,12 +954,12 @@ async function runMarketing(
       const targetId = flagString(flags, "target");
       if (!targetId) throw new CliError("cato marketing targets remove needs --target <uuid>.");
       if (g.dryRun) { out(api.renderWriteDryRun("remove target", [targetId], 1)); return 0; }
-      show(await api.removeTarget(client, campaignId, targetId)); return 0;
+      done(`Removed target ${targetId}.`, await api.removeTarget(client, campaignId, targetId)); return 0;
     }
     if (verb === "add") {
       const ids = api.requireIds(flagString(flags, "ids"), "company");
       if (g.dryRun) { out(api.renderWriteDryRun("add targets", [`Companies: ${ids.join(", ")}`], ids.length)); return 0; }
-      show(await api.addTargets(client, campaignId, ids)); return 0;
+      done("Added company targets.", await api.addTargets(client, campaignId, ids)); return 0;
     }
     const filter = build.buildAudienceFilter({
       sourceSystem: flagString(flags, "source-system"),
@@ -958,7 +967,7 @@ async function runMarketing(
       branche: flagString(flags, "branche"),
     });
     if (g.dryRun) { out(build.renderAudienceDryRun(filter, campaignId, "company-targets")); return 0; }
-    show(await api.addMatchingTargets(client, campaignId, filter));
+    done("Added matching company targets.", await api.addMatchingTargets(client, campaignId, filter));
     out(`\nCampaign: ${campaignUrl()}`);
     return 0;
   }
@@ -985,12 +994,13 @@ async function runMarketing(
     if (sub === "update") {
       const body = jsonBody();
       if (g.dryRun) { out(api.renderWriteDryRun("update campaign", [campaignId, JSON.stringify(body)])); return 0; }
-      show(await api.updateCampaign(client, campaignId, body)); return 0;
+      done("Updated campaign.", await api.updateCampaign(client, campaignId, body)); return 0;
     }
     if (g.dryRun) { out(api.renderWriteDryRun(`${sub} campaign`, [`Campaign: ${campaignId}`])); return 0; }
-    show(sub === "archive" ? await api.archiveCampaign(client, campaignId)
-       : sub === "restore" ? await api.restoreCampaign(client, campaignId)
-       : await api.deleteCampaign(client, campaignId));
+    done(`${sub[0]!.toUpperCase()}${sub.slice(1)}d campaign.`,
+      sub === "archive" ? await api.archiveCampaign(client, campaignId)
+      : sub === "restore" ? await api.restoreCampaign(client, campaignId)
+      : await api.deleteCampaign(client, campaignId));
     return 0;
   }
 
@@ -1014,7 +1024,7 @@ async function runMarketing(
       return 0;
     }
     out(`Approving ${pending.length} pending draft(s) for campaign ${campaignId}.`);
-    show(await api.bulkApproveDrafts(client, campaignId));
+    done("Bulk-approved drafts.", await api.bulkApproveDrafts(client, campaignId));
     return 0;
   }
 

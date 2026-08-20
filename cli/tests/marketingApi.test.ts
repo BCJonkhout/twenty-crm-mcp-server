@@ -3,7 +3,7 @@ import {
   addTargets, archiveCampaign, attachCandidates, bulkApproveDrafts, deleteCampaign,
   MarketingVerbError, removeMember, renderResearchProgress, renderWriteDryRun, requireIds,
   renderPersonHistory, requireVerb, setSchedule, startResearch, stopResearch, summariseResearch,
-  updateCampaign,
+  renderActionResult, updateCampaign,
 } from "../src/commands/marketingApi.ts";
 
 function mockClient(response: unknown = {}) {
@@ -213,5 +213,49 @@ describe("dispatcher branches are unique", () => {
   it("looks at a real dispatcher, not an empty slice", () => {
     expect(runMarketing).toContain('sub === "targets"');
     expect(runMarketing.length).toBeGreaterThan(2000);
+  });
+});
+
+describe("renderActionResult", () => {
+  // These endpoints answered with a raw payload dumped straight to stdout: a
+  // count object or the whole campaign. You had to read JSON to learn whether
+  // anything had happened.
+  it("turns a count payload into a sentence", () => {
+    const text = renderActionResult("Added company targets.",
+      { addedCount: 3, restoredCount: 0, skippedCount: 2 });
+    expect(text).toContain("Added company targets.");
+    expect(text).toContain("added 3, restored 0, skipped 2");
+  });
+
+  it("splits camelCase count keys into words", () => {
+    expect(renderActionResult("Marked.", { alreadyHadStatusCount: 4, markedCount: 1 }))
+      .toContain("already had status 4, marked 1");
+  });
+
+  it("summarises a campaign payload by name and state, not all 30 fields", () => {
+    const text = renderActionResult("Archived campaign.", {
+      id: "c-1", name: "Twente advocaten", status: "archived", isEnabled: false,
+      message: "x".repeat(2000), promptOverrides: { a: 1 },
+    });
+    expect(text).toContain("name: Twente advocaten");
+    expect(text).toContain("status: archived");
+    expect(text).toContain("enabled: false");
+    expect(text).not.toContain("promptOverrides");
+    expect(text.length).toBeLessThan(200);
+  });
+
+  // A campaign payload carries memberCount and friends as well. Reporting those
+  // after an archive tells you nothing about whether it archived.
+  it("prefers the entity over its counts when both are present", () => {
+    const text = renderActionResult("Archived campaign.", {
+      id: "c-1", name: "Twente advocaten", status: "archived", isEnabled: false,
+      memberCount: 0, pendingReviewCount: 0,
+    });
+    expect(text).toContain("status: archived");
+    expect(text).not.toContain("member 0");
+  });
+
+  it("falls back to the action line when the payload says nothing useful", () => {
+    expect(renderActionResult("Done.", null)).toBe("Done.");
   });
 });
