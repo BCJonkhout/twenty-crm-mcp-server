@@ -31,7 +31,7 @@ const COMMON_READ_FLAGS: FlagSpecs = {
   depth: { type: "number", placeholder: "<0|1|2>", description: "Relation depth to include (default 0 = flat)." },
   fields: { type: "string[]", placeholder: "<a,b>", description: "Restrict output columns to these fields (dotted paths allowed)." },
   "include-deleted": { type: "boolean", description: "Include soft-deleted records (excluded by default)." },
-  all: { type: "boolean", description: "Page through every match instead of stopping at --limit." },
+  all: { type: "boolean", description: "Page through every match. Combine with --limit to cap it deliberately." },
 };
 
 const PEOPLE_FILTER_FLAGS: FlagSpecs = {

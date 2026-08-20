@@ -28,6 +28,8 @@ export interface ListInvocation {
   orderBy?: string;
   depth?: number;
   fetchAll: boolean;
+  /** True only when the caller passed --limit themselves. See fetchRecords. */
+  limitExplicit?: boolean;
 }
 
 /**
@@ -111,11 +113,12 @@ export function planList(objectPath: ObjectPath, flags: Record<string, FlagValue
       break;
   }
 
-  const limit = flagNumber(flags, "limit") ?? DEFAULT_LIMIT;
+  const explicitLimit = flagNumber(flags, "limit");
   return {
     objectPath,
     filter,
-    limit,
+    limit: explicitLimit ?? DEFAULT_LIMIT,
+    limitExplicit: explicitLimit !== undefined,
     orderBy: flagString(flags, "order-by"),
     depth: flagNumber(flags, "depth"),
     fetchAll: flagBool(flags, "all") === true,
@@ -124,6 +127,11 @@ export function planList(objectPath: ObjectPath, flags: Record<string, FlagValue
 
 export async function fetchRecords(client: RestClient, plan: ListInvocation): Promise<TwentyRecord[]> {
   if (plan.fetchAll) {
+    // `--all` means every match. It used to stop at plan.limit, which defaults
+    // to 20 when nobody passed --limit — so `--all` silently returned 20 rows
+    // and called it complete, the exact opposite of what its help promises.
+    // An explicit --limit alongside --all is still honoured as a deliberate cap.
+    const cap = plan.limitExplicit ? plan.limit : Infinity;
     const out: TwentyRecord[] = [];
     const iterator = iterRecords(client, plan.objectPath, {
       filter: plan.filter,
@@ -134,7 +142,7 @@ export async function fetchRecords(client: RestClient, plan: ListInvocation): Pr
     });
     for await (const record of iterator) {
       out.push(record);
-      if (out.length >= plan.limit) break;
+      if (out.length >= cap) break;
     }
     return out;
   }

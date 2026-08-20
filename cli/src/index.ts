@@ -35,8 +35,19 @@ import { createGraphQLTransport, currentWorkspace } from "./auth-api.ts";
 
 class CliError extends Error {}
 
+// stdout naar een pipe is asynchroon zodra de output de 64KiB pipe-buffer
+// passeert, en `process.exit()` wacht daar niet op: een grote `--json`-lijst
+// kwam er afgekapt op precies 65536 bytes uit — ongeldige JSON, waar consumers
+// workarounds omheen bouwden. We houden de laatste write vast en wachten die af
+// vóór exit; writes zijn geordend, dus daarmee is al het eerdere ook weg.
+// Let op: een callback op een lege slotwrite werkt hier NIET — die vuurt in Bun
+// meteen, zonder op eerder schrijfwerk te wachten.
+let lastWrite: Promise<void> = Promise.resolve();
+
 function out(text: string): void {
-  process.stdout.write(`${text}\n`);
+  lastWrite = new Promise<void>((resolve) => {
+    process.stdout.write(`${text}\n`, () => resolve());
+  });
 }
 
 async function readStdin(): Promise<string> {
@@ -1002,4 +1013,5 @@ const code = await main(process.argv.slice(2)).catch((err: unknown) => {
   process.stderr.write(`error: ${e.message ?? String(err)}\n`);
   return 1;
 });
+await lastWrite;
 process.exit(code);
