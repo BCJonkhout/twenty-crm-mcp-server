@@ -50,6 +50,25 @@ function out(text: string): void {
   });
 }
 
+/** Schrijfacties volgen dezelfde regel als `import`: machine-formaat als erom
+ *  gevraagd is, anders een leesbare bevestiging. */
+function showWrite(
+  outcome: write.WriteOutcome,
+  body: Record<string, unknown> | null,
+  ctx: { json: boolean; csv: boolean },
+  extra: string[] = [],
+): void {
+  // Eén commando schrijft één record, dus --json geeft dat record — niet een
+  // lijst van één, zodat `| jq -r .id` gewoon werkt. --csv heeft wel een
+  // kopregel nodig en gaat daarom door de rij-renderer.
+  if (ctx.json) { out(JSON.stringify(outcome, null, 2)); return; }
+  if (ctx.csv) {
+    out(render([outcome as unknown as Record<string, unknown>], { json: false, csv: true }));
+    return;
+  }
+  out(write.renderWriteSuccess(outcome, body, extra));
+}
+
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
@@ -187,7 +206,7 @@ async function runRecordCommand(
       const outcome = sub === "create"
         ? await write.createRecord(client, objectPath, oppBody, baseUrl)
         : await write.updateRecord(client, objectPath, id!, oppBody, baseUrl);
-      out(JSON.stringify(outcome, null, 2));
+      showWrite(outcome, oppBody, ctx);
       return 0;
     }
 
@@ -212,17 +231,21 @@ async function runRecordCommand(
       }
       const noteBody = write.buildNoteBody(noteFlags);
       if (gate.dryRun) { out(write.renderWriteDryRun("create", objectPath, noteBody)); return 0; }
-      out(JSON.stringify(
+      const linked = [
+        noteFlags.companyId ? `linked to company ${noteFlags.companyId}` : null,
+        noteFlags.personId ? `linked to person ${noteFlags.personId}` : null,
+      ].filter((l): l is string => l !== null);
+      showWrite(
         await write.createNoteWithTargets(client, noteBody,
           { companyId: noteFlags.companyId, personId: noteFlags.personId }, baseUrl),
-        null, 2));
+        noteBody, ctx, linked);
       return 0;
     }
 
     if (sub === "delete") {
       if (!id) throw new CliError(`cato ${objectPath} delete needs a record id.`);
       if (gate.dryRun) { out(write.renderWriteDryRun("delete", objectPath, null, id)); return 0; }
-      out(JSON.stringify(await write.deleteRecord(client, objectPath, id), null, 2));
+      showWrite(await write.deleteRecord(client, objectPath, id), null, ctx);
       return 0;
     }
 
@@ -257,8 +280,8 @@ async function runRecordCommand(
     const outcome = sub === "create"
       ? await write.createRecord(client, objectPath, body, baseUrl)
       : await write.updateRecord(client, objectPath, id!, body, baseUrl);
-    out(JSON.stringify(outcome, null, 2));
-    if (inheritedFrom) out(`Assignee inherited from company ${inheritedFrom}.`);
+    showWrite(outcome, body, ctx,
+      inheritedFrom ? [`assignee inherited from company ${inheritedFrom}`] : []);
     return 0;
   }
 

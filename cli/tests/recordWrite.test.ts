@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   buildCompanyBody, buildNoteBody, buildOpportunityBody, buildPersonBody, createNoteWithTargets,
   createRecord, deleteRecord, findOpenOpportunities, RecordWriteError,
-  renderWriteDryRun, requireCreateFields, resolveAssignee, updateRecord,
+  renderWriteDryRun, renderWriteSuccess, requireCreateFields, resolveAssignee, updateRecord,
 } from "../src/commands/recordWrite.ts";
 
 const BASE = "https://crm.prudai.com";
@@ -252,5 +252,44 @@ describe("createNoteWithTargets", () => {
     await expect(createNoteWithTargets(client, { title: "t" }, { companyId: "c-1" }, BASE))
       .rejects.toThrow(/was removed again/);
     expect(calls).toContainEqual({ endpoint: "/rest/notes/n-1", method: "DELETE" });
+  });
+});
+
+describe("renderWriteSuccess", () => {
+  // The old confirmation was a JSON blob with action/object/id/url and nothing
+  // about the write itself: after `--stage ON_HOLD` you could not tell from the
+  // output whether the stage had changed. The dry-run showed the body; the real
+  // thing did not.
+  it("says what was actually written, not just that something was", () => {
+    const text = renderWriteSuccess(
+      { action: "update", object: "opportunities", id: "o-1", url: "https://crm/x" },
+      { stage: "ON_HOLD", amount: { amountMicros: 25_000_000_000, currencyCode: "EUR" } },
+    );
+    expect(text).toContain("Updated opportunity o-1");
+    expect(text).toContain("stage: ON_HOLD");
+    expect(text).toContain("€ 25.000");
+    expect(text).toContain("https://crm/x");
+  });
+
+  it("flattens Twenty's composite fields instead of printing [object Object]", () => {
+    const text = renderWriteSuccess(
+      { action: "create", object: "people", id: "p-1" },
+      { name: { firstName: "Beau", lastName: "Jonkhout" }, emails: { primaryEmail: "b@prudai.com" } },
+    );
+    expect(text).not.toContain("[object Object]");
+    expect(text).toContain("firstName: Beau");
+    expect(text).toContain("primaryEmail: b@prudai.com");
+  });
+
+  it("does not dump rich text into the terminal", () => {
+    const text = renderWriteSuccess(
+      { action: "create", object: "notes", id: "n-1" },
+      { title: "Gesprek", bodyV2: { markdown: "x".repeat(5000), blocknote: "[]" } },
+      ["linked to company c-1"],
+    );
+    expect(text).toContain("title: Gesprek");
+    expect(text).toContain("body: (rich text)");
+    expect(text).toContain("linked to company c-1");
+    expect(text.length).toBeLessThan(300);
   });
 });

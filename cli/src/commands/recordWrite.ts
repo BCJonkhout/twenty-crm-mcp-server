@@ -237,6 +237,50 @@ export async function deleteRecord(
   return { action: "delete", object, id };
 }
 
+/**
+ * Wat een geslaagde schrijfactie terugmeldt. `import` en `auth` doen dit al zo:
+ * een leesbare zin plus een klikbare URL, tenzij de caller --json/--csv vroeg.
+ * De record-schrijfacties gaven alleen een JSON-blob terug die niet vertelde
+ * wát er geschreven was — na `--stage ON_HOLD` kon je aan de uitvoer niet zien
+ * of de stage nu ON_HOLD was. De dry-run toonde de body, de echte actie niet.
+ */
+export function summariseBody(body: Record<string, unknown>): string[] {
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(body)) {
+    if (value === null || value === undefined) continue;
+    if (key === "bodyV2") { parts.push("body: (rich text)"); continue; }
+    if (typeof value === "object") {
+      const obj = value as Record<string, unknown>;
+      if (typeof obj.amountMicros === "number") {
+        const eur = (obj.amountMicros / 1_000_000).toLocaleString("nl-NL");
+        parts.push(`${key}: € ${eur}`);
+        continue;
+      }
+      for (const [sub, subValue] of Object.entries(obj)) {
+        if (subValue === null || subValue === undefined || subValue === "") continue;
+        parts.push(`${sub}: ${String(subValue)}`);
+      }
+      continue;
+    }
+    parts.push(`${key}: ${String(value)}`);
+  }
+  return parts;
+}
+
+export function renderWriteSuccess(
+  outcome: WriteOutcome,
+  body: Record<string, unknown> | null,
+  extra: string[] = [],
+): string {
+  const verb = { create: "Created", update: "Updated", delete: "Deleted" }[outcome.action];
+  const lines = [`${verb} ${SINGULAR[outcome.object]} ${outcome.id ?? "(no id returned)"}`];
+  const fields = body ? summariseBody(body) : [];
+  for (const f of fields) lines.push(`  ${f}`);
+  for (const e of extra) lines.push(`  ${e}`);
+  if (outcome.url) lines.push("", outcome.url);
+  return lines.join("\n");
+}
+
 export function renderWriteDryRun(
   action: "create" | "update" | "delete",
   object: WritableObject,
