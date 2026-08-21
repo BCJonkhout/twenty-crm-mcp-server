@@ -8,7 +8,7 @@ export const COMMAND_TREE: Record<string, readonly string[]> = {
   people: ["list", "get", "search", "create", "update", "delete", "history"],
   companies: ["list", "get", "search", "create", "update", "delete"],
   opportunities: ["list", "create", "update"],
-  notes: ["list", "create"],
+  notes: ["list", "create", "update"],
   segments: ["build"],
   import: [],
   auth: ["create", "set", "list", "revoke", "status", "whoami", "roles"],
@@ -130,6 +130,13 @@ const NOTE_WRITE_FLAGS: FlagSpecs = {
   "person-id": { type: "string", placeholder: "<uuid>", description: "Attach the note to this person." },
 };
 
+// Update never touches the note's links — only the fields it can PATCH.
+const NOTE_UPDATE_FLAGS: FlagSpecs = {
+  title: { type: "string", placeholder: "<text>", description: "New note title." },
+  body: { type: "string", placeholder: "<text>", description: "New note body (markdown). Use --body-file for anything longer than a line." },
+  "body-file": { type: "string", placeholder: "<path>", description: "Read the new note body from a file." },
+};
+
 const IMPORT_FLAGS: FlagSpecs = {
   csv: { type: "string", placeholder: "<path>", description: "CSV file to analyse." },
   object: { type: "string", placeholder: "<people|companies>", description: "Target object (default: people)." },
@@ -190,6 +197,7 @@ export function flagSpecsFor(command: readonly string[]): FlagSpecs {
       return { ...COMMON_READ_FLAGS, ...OPPORTUNITY_FILTER_FLAGS };
     case "notes":
       if (sub === "create") return NOTE_WRITE_FLAGS;
+      if (sub === "update") return NOTE_UPDATE_FLAGS;
       return { ...COMMON_READ_FLAGS, ...NOTE_FILTER_FLAGS };
     case "segments":
       return SEGMENT_FLAGS;
@@ -216,6 +224,7 @@ export const COMMAND_SUMMARIES: Record<string, string> = {
   "opportunities update": "Update an opportunity by id — move its stage, set the amount. Needs --no-dry-run --yes.",
   "notes list": "List notes.",
   "notes create": "Create a note and attach it to a company and/or person. Needs --no-dry-run --yes.",
+  "notes update": "Update a note's title and/or body by id. Links stay untouched. Needs --no-dry-run --yes.",
   "segments build": "Build a target-audience selection from filters and write it out as JSON/CSV.",
   import: "Analyse a CSV; with --source-system also tag/create companies. Needs --no-dry-run --yes.",
   "people create": "Create a person. Inherits the company's account owner so the record stays visible.",

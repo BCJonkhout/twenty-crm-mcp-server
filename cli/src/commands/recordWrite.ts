@@ -122,6 +122,19 @@ export function buildNoteBody(flags: NoteFlags): Record<string, unknown> {
   return transformBodyField({ title: flags.title, body: flags.body });
 }
 
+/** Update-half of the note write path: PATCH only the fields that were passed. */
+export function buildNoteUpdateBody(flags: NoteFlags): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (flags.title?.trim()) body.title = flags.title;
+  if (flags.body !== undefined && flags.body.trim() !== "") {
+    Object.assign(body, transformBodyField({ body: flags.body }));
+  }
+  if (Object.keys(body).length === 0) {
+    throw new RecordWriteError("Nothing to write: pass --title, --body or --body-file.");
+  }
+  return body;
+}
+
 /**
  * One open opportunity per company. Three cards for one deal is the failure mode
  * this guard exists for; `--force` is the escape hatch for a genuinely second

@@ -168,8 +168,8 @@ async function runRecordCommand(
   const baseUrl = ctx.baseUrl ?? DEFAULT_BASE_URL;
 
   if (sub === "create" || sub === "update" || sub === "delete") {
-    if (objectPath === "notes" && sub !== "create") {
-      throw new CliError(`cato notes ${sub} is not supported.`);
+    if (objectPath === "notes" && sub === "delete") {
+      throw new CliError("cato notes delete is not supported.");
     }
     if (objectPath === "opportunities" && sub === "delete") {
       throw new CliError("cato opportunities delete is not supported — move the stage to VERLOREN instead.");
@@ -226,6 +226,13 @@ async function runRecordCommand(
         title: flagString(flags, "title"), body: noteText,
         companyId: flagString(flags, "company-id"), personId: flagString(flags, "person-id"),
       };
+      if (sub === "update") {
+        if (!id) throw new CliError("cato notes update needs a note id.");
+        const patchBody = write.buildNoteUpdateBody(noteFlags);
+        if (gate.dryRun) { out(write.renderWriteDryRun("update", objectPath, patchBody, id)); return 0; }
+        showWrite(await write.updateRecord(client, objectPath, id, patchBody, baseUrl), patchBody, ctx);
+        return 0;
+      }
       if (!noteFlags.companyId && !noteFlags.personId) {
         throw new CliError("cato notes create needs --company-id and/or --person-id — an unattached note is unfindable.");
       }
