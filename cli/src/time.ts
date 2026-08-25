@@ -76,3 +76,46 @@ export function zonedDayStartIso(
     y: shifted.getUTCFullYear(), m: shifted.getUTCMonth() + 1, d: shifted.getUTCDate(),
   }, timeZone).toISOString();
 }
+
+/**
+ * The one place that reads a due-date value. Both sides of a due date go
+ * through it — `--due` when writing, `--due-before`/`--due-after` when
+ * searching — because when they each had their own parser they disagreed, and
+ * a window silently skipped the cards it had just written.
+ *
+ * Accepted:
+ *   2026-09-04                  midnight in `timeZone`
+ *   2026-09-04T10:00[:30]       wall clock in `timeZone` (a space also works)
+ *   2026-09-04T10:00:00+02:00   an explicit zone is taken literally
+ *
+ * A zone-less time is deliberately NOT handed to `new Date()`: that resolves it
+ * in the host's zone, so the same command would mean different instants on a
+ * laptop and on the server.
+ *
+ * Returns null when the value is not one of those forms — the caller words the
+ * error, since the flag name differs per call site.
+ */
+/**
+ * The shape of a zone-less day or wall-clock time. Exported so a caller can
+ * tell "you typed something that is not a date at all" apart from "you typed a
+ * date-shaped thing that does not exist", which are different mistakes.
+ */
+export const WALL_CLOCK_RE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+
+export function parseZonedInstant(value: string, timeZone: string = DUE_TIME_ZONE): string | null {
+  const v = value.trim();
+  const wall = WALL_CLOCK_RE.exec(v);
+  if (wall) {
+    const [y, m, d] = [Number(wall[1]), Number(wall[2]), Number(wall[3])];
+    const hh = wall[4] === undefined ? 0 : Number(wall[4]);
+    const mm = wall[5] === undefined ? 0 : Number(wall[5]);
+    const ss = wall[6] === undefined ? 0 : Number(wall[6]);
+    if (!isRealDay(y, m, d) || hh > 23 || mm > 59 || ss > 59) return null;
+    return zonedToUtc({ y, m, d, hh, mm, ss }, timeZone).toISOString();
+  }
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/.test(v)) {
+    const d = new Date(v.replace(" ", "T"));
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return null;
+}

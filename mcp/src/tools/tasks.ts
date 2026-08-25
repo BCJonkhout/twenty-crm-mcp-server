@@ -80,7 +80,7 @@ export const definitions: Tool[] = [
   },
   {
     name: "delete_task",
-    description: "Soft-delete a task.",
+    description: "Delete a task. PERMANENT: Twenty's REST delete takes a soft_delete parameter that defaults to FALSE, and this tool does not send it, so the row is removed permanently and cannot be restored. The trash in the CATO web UI is a soft delete; this is not.",
     inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
   },
 ];

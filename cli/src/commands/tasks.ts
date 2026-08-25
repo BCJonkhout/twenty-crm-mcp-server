@@ -18,13 +18,9 @@
 import { andExpr, clause, iterRecords, type RestClient, type TwentyRecord } from "@twenty-crm/core";
 import { isKnownTaskStatus, normaliseTaskStatus, TASK_STATUS_VALUES } from "../filters.ts";
 import { render, renderOne, toCsv } from "../output.ts";
-import { DUE_TIME_ZONE, isRealDay, zonedToUtc } from "../time.ts";
+import { DUE_TIME_ZONE, parseZonedInstant, WALL_CLOCK_RE, zonedToUtc } from "../time.ts";
 import { DEFAULT_BASE_URL, recordUrl } from "../urls.ts";
 import { fetchRecords, type ListInvocation } from "./records.ts";
-
-// Due dates are a task concept to the rest of the CLI, so they stay reachable
-// here even though the zone arithmetic itself now lives in time.ts.
-export { DUE_TIME_ZONE, zonedToUtc };
 
 export class TaskError extends Error {}
 
@@ -41,21 +37,12 @@ export const DEFAULT_TASK_ORDER = "dueAt[AscNullsLast]";
  * card shows the intended date in the UI and turns overdue at the start of it.
  */
 export function parseDueAt(value: string, timeZone: string = DUE_TIME_ZONE): string {
-  const v = value.trim();
-  const wall = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(v);
-  if (wall) {
-    const [y, m, d] = [Number(wall[1]), Number(wall[2]), Number(wall[3])];
-    const hh = wall[4] === undefined ? 0 : Number(wall[4]);
-    const mm = wall[5] === undefined ? 0 : Number(wall[5]);
-    const ss = wall[6] === undefined ? 0 : Number(wall[6]);
-    if (!isRealDay(y, m, d) || hh > 23 || mm > 59 || ss > 59) {
-      throw new TaskError(`--due: '${value}' is not a real date/time.`);
-    }
-    return zonedToUtc({ y, m, d, hh, mm, ss }, timeZone).toISOString();
-  }
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/.test(v)) {
-    const d = new Date(v);
-    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  const iso = parseZonedInstant(value, timeZone);
+  if (iso) return iso;
+  // "2026-02-30" and "morgen" are different mistakes and deserve different
+  // answers: one is a day that does not exist, the other is not a date at all.
+  if (WALL_CLOCK_RE.test(value.trim())) {
+    throw new TaskError(`--due: '${value}' is not a real date/time.`);
   }
   throw new TaskError(
     `--due: '${value}' is not a valid date. Use YYYY-MM-DD, YYYY-MM-DDTHH:MM (Europe/Amsterdam) or an ISO timestamp with zone.`,

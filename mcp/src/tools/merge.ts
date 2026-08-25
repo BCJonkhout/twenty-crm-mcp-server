@@ -37,7 +37,9 @@ async function listAllTargets(client: RestClient, kind: "noteTargets" | "taskTar
 export const definitions: Tool[] = [
   {
     name: "merge_people",
-    description: `Merge duplicate person records into one primary. Re-points every noteTarget / taskTarget from duplicates to the primary, copies over any field that is null on primary, then soft-deletes the duplicates.
+    description: `Merge duplicate person records into one primary. Re-points every noteTarget / taskTarget from duplicates to the primary, copies over any field that is null on primary, then DELETES the duplicates PERMANENTLY — the
+duplicate rows are removed from the database and cannot be restored, so satisfy yourself that they
+really are duplicates first.
 
 Example:
   primaryId: "<uuid-to-keep>"
@@ -134,9 +136,10 @@ export function createHandlers(client: RestClient): Record<string, ToolHandler> 
           await client.request(`/rest/people/${primaryId}`, { method: "PATCH", body: patch });
         }
 
-        // 3. Soft-delete duplicate
+        // 3. Delete the duplicate. This is permanent: Twenty's soft_delete query
+        //    parameter defaults to false and we do not send it.
         await client.request(`/rest/people/${dupId}`, { method: "DELETE" });
-        report.push({ dupId, repointed, copiedFields: Object.keys(patch), softDeleted: true });
+        report.push({ dupId, repointed, copiedFields: Object.keys(patch), deleted: "permanent" });
       }
       return text("merge_people:", { primaryId, report });
     },

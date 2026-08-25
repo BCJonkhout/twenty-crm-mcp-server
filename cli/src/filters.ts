@@ -6,7 +6,7 @@
 // the same source.
 
 import { andExpr, clause, combineWithSoftDelete, orExpr, searchExpr } from "@twenty-crm/core";
-import { DAY_RE, zonedDayStartIso } from "./time.ts";
+import { DAY_RE, DUE_TIME_ZONE, parseZonedInstant, zonedDayStartIso } from "./time.ts";
 
 /** MULTI_SELECT `product` on person and company. */
 export const PRODUCT_VALUES = ["LEO", "VERA", "ZIA", "BEVER", "IRMA", "ORDO", "CATO"] as const;
@@ -277,14 +277,16 @@ export function buildTaskFilter(input: TaskFilterInput): string | null {
     parts.push(clause("status", "eq", status));
   }
   if (input.assigneeId) parts.push(clause("assigneeId", "eq", input.assigneeId));
-  // A bare day is a day in Europe/Amsterdam, exactly as --due writes one. Read
-  // as UTC these bounds were off by the offset, so `--due-after 2026-09-04`
+  // Both bounds are read exactly as --due writes a value, Europe/Amsterdam and
+  // all. Read as UTC they were off by the offset, so `--due-after 2026-09-04`
   // missed every card written with `--due 2026-09-04` (stored 09-03T22:00Z).
-  if (input.dueAfter) parts.push(clause("dueAt", "gte", dueBound("due-after", input.dueAfter, 0)));
+  if (input.dueAfter) parts.push(clause("dueAt", "gte", dueBound("due-after", input.dueAfter, 0).iso));
   if (input.dueBefore) {
-    // "before 4 September" on a task board means "by the end of the 4th", so
-    // the bound is the start of the 5th, here, exclusive.
-    parts.push(clause("dueAt", "lt", dueBound("due-before", input.dueBefore, 1)));
+    const bound = dueBound("due-before", input.dueBefore, 1);
+    // A bare day means "by the end of that day", so the bound is the start of
+    // the next one and has to be exclusive. A timestamp is a moment the caller
+    // named, and "on or before" includes it.
+    parts.push(clause("dueAt", bound.exclusive ? "lt" : "lte", bound.iso));
   }
   if (input.overdue) {
     const now = (input.now ?? new Date()).toISOString();
@@ -299,17 +301,27 @@ export function buildTaskFilter(input: TaskFilterInput): string | null {
 }
 
 /**
- * One end of a due-date window. A bare day is anchored at midnight in the
- * team's zone and shifted by `plusDays` whole calendar days; anything else is
- * a timestamp and is taken literally, zone and all.
+ * One end of a due-date window, parsed the same way `--due` parses the value it
+ * writes — that agreement is the whole point of this helper. A bare day is
+ * midnight in the team's zone, shifted by `plusDays` whole calendar days, and
+ * bounds an open interval; a wall-clock time is that time here; a timestamp
+ * with a zone is literal, and bounds a closed one.
  */
-function dueBound(flag: string, value: string, plusDays: number): string {
-  if (DAY_RE.test(value.trim())) {
-    const iso = zonedDayStartIso(value, plusDays);
+function dueBound(flag: string, value: string, plusDays: number): { iso: string; exclusive: boolean } {
+  const v = value.trim();
+  if (DAY_RE.test(v)) {
+    const iso = zonedDayStartIso(v, plusDays);
     if (!iso) throw new FilterError(`--${flag}: '${value}' is not a real date.`);
-    return iso;
+    return { iso, exclusive: true };
   }
-  return isoDate(flag, value);
+  const iso = parseZonedInstant(v);
+  if (!iso) {
+    throw new FilterError(
+      `--${flag}: '${value}' is not a valid date. Use YYYY-MM-DD, YYYY-MM-DDTHH:MM ` +
+      `(${DUE_TIME_ZONE}) or an ISO-8601 timestamp with a zone.`,
+    );
+  }
+  return { iso, exclusive: false };
 }
 
 // ---- helpers --------------------------------------------------------------

@@ -84,8 +84,15 @@ describe("buildTaskFilter", () => {
     // Amsterdam midnight, i.e. the moment the 5th starts here — not 00:00Z.
     expect(buildTaskFilter({ dueBefore: "2026-09-04" })!).toContain('dueAt[lt]:"2026-09-04T22:00:00.000Z"');
     expect(buildTaskFilter({ dueAfter: "2026-09-01" })!).toContain('dueAt[gte]:"2026-08-31T22:00:00.000Z"');
-    // A timestamp is taken literally, zone and all.
-    expect(buildTaskFilter({ dueBefore: "2026-09-04T10:00:00.000Z" })!).toContain('dueAt[lt]:"2026-09-04T10:00:00.000Z"');
+    // A timestamp with a zone is literal, and "on or before" includes it, so
+    // the bound stays closed. Only a bare day turns into an exclusive bound on
+    // the next midnight.
+    expect(buildTaskFilter({ dueBefore: "2026-09-04T10:00:00.000Z" })!).toContain('dueAt[lte]:"2026-09-04T10:00:00.000Z"');
+    // A wall-clock time without a zone is Amsterdam, not the host's zone —
+    // otherwise the same command means different instants on a laptop.
+    expect(buildTaskFilter({ dueBefore: "2026-09-04T10:00" })!).toContain('dueAt[lte]:"2026-09-04T08:00:00.000Z"');
+    expect(buildTaskFilter({ dueAfter: "2026-12-04T10:00" })!).toContain('dueAt[gte]:"2026-12-04T09:00:00.000Z"');
+    expect(() => buildTaskFilter({ dueAfter: "gisteren" })).toThrow(FilterError);
   });
 
   /**
@@ -101,21 +108,22 @@ describe("buildTaskFilter", () => {
       new Date(new RegExp(`dueAt\\[${op}\\]:"([^"]+)"`).exec(f ?? "")![1]!).getTime();
 
     for (const day of ["2026-09-04", "2026-01-15", "2026-03-29", "2026-10-25"]) {
-      const due = new Date(parseDueAt(day)).getTime();
       const [y, m, d] = day.split("-").map(Number);
       const nextDay = new Date(Date.UTC(y!, m! - 1, d! + 1)).toISOString().slice(0, 10);
       const prevDay = new Date(Date.UTC(y!, m! - 1, d! - 1)).toISOString().slice(0, 10);
 
-      // due on D is inside [D, …] and inside […, D], and outside both neighbours.
-      expect(due).toBeGreaterThanOrEqual(bound(buildTaskFilter({ dueAfter: day }), "gte"));
-      expect(due).toBeLessThan(bound(buildTaskFilter({ dueBefore: day }), "lt"));
-      expect(due).toBeLessThan(bound(buildTaskFilter({ dueAfter: nextDay }), "gte"));
-      expect(due).toBeGreaterThanOrEqual(bound(buildTaskFilter({ dueBefore: prevDay }), "lt"));
+      // Every way of saying "due on this day", including the very end of it:
+      // a shift on ONE side of the contract has to break at least one of these.
+      for (const written of [day, `${day}T00:00`, `${day}T09:30`, `${day}T23:30`]) {
+        const due = new Date(parseDueAt(written)).getTime();
+        // inside the windows that claim to contain it …
+        expect(due).toBeGreaterThanOrEqual(bound(buildTaskFilter({ dueAfter: day }), "gte"));
+        expect(due).toBeLessThan(bound(buildTaskFilter({ dueBefore: day }), "lt"));
+        // … and outside both neighbouring days.
+        expect(due).toBeLessThan(bound(buildTaskFilter({ dueAfter: nextDay }), "gte"));
+        expect(due).toBeGreaterThanOrEqual(bound(buildTaskFilter({ dueBefore: prevDay }), "lt"));
+      }
     }
-
-    // A time on the last day of the window still counts as inside it.
-    const late = new Date(parseDueAt("2026-09-04T23:30")).getTime();
-    expect(late).toBeLessThan(bound(buildTaskFilter({ dueBefore: "2026-09-04" }), "lt"));
   });
 
   // Two tasks on the live board have no status at all; a bare status[neq]:DONE
