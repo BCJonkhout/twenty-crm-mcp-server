@@ -1,8 +1,10 @@
 // `cato tasks` — the task board in CATO, read side plus the glue the write
 // verbs need (due-date parsing, assignee lookup, target resolution).
 //
-// Tasks replace the Trello board: /memo-verwerken, /give-me-work,
-// /trello-agenda and /trello-groom read and write them through these verbs.
+// Tasks are to replace the Trello board: /memo-verwerken, /give-me-work,
+// /trello-agenda and /trello-groom are meant to read and write them through
+// these verbs. Those skills still run on Trello today — this is the CLI side
+// standing ready, not a live integration.
 // Everything that knows how a task hangs together lives here — the write
 // bodies themselves are in recordWrite.ts next to notes and opportunities.
 //
@@ -16,42 +18,20 @@
 import { andExpr, clause, iterRecords, type RestClient, type TwentyRecord } from "@twenty-crm/core";
 import { isKnownTaskStatus, normaliseTaskStatus, TASK_STATUS_VALUES } from "../filters.ts";
 import { render, renderOne, toCsv } from "../output.ts";
+import { DUE_TIME_ZONE, isRealDay, zonedToUtc } from "../time.ts";
 import { DEFAULT_BASE_URL, recordUrl } from "../urls.ts";
 import { fetchRecords, type ListInvocation } from "./records.ts";
 
-export class TaskError extends Error {}
+// Due dates are a task concept to the rest of the CLI, so they stay reachable
+// here even though the zone arithmetic itself now lives in time.ts.
+export { DUE_TIME_ZONE, zonedToUtc };
 
-/** Due dates are entered and shown in the team's zone, not the host's. */
-export const DUE_TIME_ZONE = "Europe/Amsterdam";
+export class TaskError extends Error {}
 
 /** Soonest due first; undated tasks at the end. */
 export const DEFAULT_TASK_ORDER = "dueAt[AscNullsLast]";
 
 // ---- due dates --------------------------------------------------------------
-
-function zoneOffsetMs(utcMs: number, timeZone: string): number {
-  const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone, hourCycle: "h23",
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  });
-  const p: Record<string, string> = {};
-  for (const part of dtf.formatToParts(new Date(utcMs))) p[part.type] = part.value;
-  const wall = Date.UTC(+p.year!, +p.month! - 1, +p.day!, +p.hour!, +p.minute!, +p.second!);
-  return wall - utcMs;
-}
-
-/** Wall-clock time in `timeZone` → the UTC instant (DST-aware, two passes). */
-export function zonedToUtc(
-  wall: { y: number; m: number; d: number; hh?: number; mm?: number; ss?: number },
-  timeZone: string = DUE_TIME_ZONE,
-): Date {
-  const guess = Date.UTC(wall.y, wall.m - 1, wall.d, wall.hh ?? 0, wall.mm ?? 0, wall.ss ?? 0);
-  let utc = guess - zoneOffsetMs(guess, timeZone);
-  const second = zoneOffsetMs(utc, timeZone);
-  if (guess - second !== utc) utc = guess - second;
-  return new Date(utc);
-}
 
 /**
  * `--due` accepts a day (`2026-09-04`), a day with a time
@@ -68,9 +48,7 @@ export function parseDueAt(value: string, timeZone: string = DUE_TIME_ZONE): str
     const hh = wall[4] === undefined ? 0 : Number(wall[4]);
     const mm = wall[5] === undefined ? 0 : Number(wall[5]);
     const ss = wall[6] === undefined ? 0 : Number(wall[6]);
-    const probe = new Date(Date.UTC(y, m - 1, d));
-    const validDay = probe.getUTCFullYear() === y && probe.getUTCMonth() === m - 1 && probe.getUTCDate() === d;
-    if (!validDay || hh > 23 || mm > 59 || ss > 59) {
+    if (!isRealDay(y, m, d) || hh > 23 || mm > 59 || ss > 59) {
       throw new TaskError(`--due: '${value}' is not a real date/time.`);
     }
     return zonedToUtc({ y, m, d, hh, mm, ss }, timeZone).toISOString();

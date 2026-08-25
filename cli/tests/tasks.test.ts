@@ -81,9 +81,41 @@ describe("buildTaskFilter", () => {
 
   // A card that is due "before 4 September" is still due on the 4th itself.
   it("treats --due-before <day> as inclusive of that day", () => {
-    expect(buildTaskFilter({ dueBefore: "2026-09-04" })!).toContain('dueAt[lt]:"2026-09-05T00:00:00.000Z"');
-    expect(buildTaskFilter({ dueBefore: "2026-09-04T10:00:00.000Z" })!).toContain('dueAt[lte]:"2026-09-04T10:00:00.000Z"');
-    expect(buildTaskFilter({ dueAfter: "2026-09-01" })!).toContain('dueAt[gte]:"2026-09-01T00:00:00.000Z"');
+    // Amsterdam midnight, i.e. the moment the 5th starts here — not 00:00Z.
+    expect(buildTaskFilter({ dueBefore: "2026-09-04" })!).toContain('dueAt[lt]:"2026-09-04T22:00:00.000Z"');
+    expect(buildTaskFilter({ dueAfter: "2026-09-01" })!).toContain('dueAt[gte]:"2026-08-31T22:00:00.000Z"');
+    // A timestamp is taken literally, zone and all.
+    expect(buildTaskFilter({ dueBefore: "2026-09-04T10:00:00.000Z" })!).toContain('dueAt[lt]:"2026-09-04T10:00:00.000Z"');
+  });
+
+  /**
+   * The contract, not the literals: a task written with `--due D` has to fall
+   * inside every window that says it should. The two sides used to disagree —
+   * `--due` anchored the day in Europe/Amsterdam, the filter bounds in UTC — so
+   * `--due-after D` silently skipped the cards written with `--due D`. Asserting
+   * the boundary strings alone could not see that, because both sides were
+   * internally consistent; only comparing them catches it.
+   */
+  it("builds windows that actually contain the tasks --due writes", () => {
+    const bound = (f: string | null, op: string) =>
+      new Date(new RegExp(`dueAt\\[${op}\\]:"([^"]+)"`).exec(f ?? "")![1]!).getTime();
+
+    for (const day of ["2026-09-04", "2026-01-15", "2026-03-29", "2026-10-25"]) {
+      const due = new Date(parseDueAt(day)).getTime();
+      const [y, m, d] = day.split("-").map(Number);
+      const nextDay = new Date(Date.UTC(y!, m! - 1, d! + 1)).toISOString().slice(0, 10);
+      const prevDay = new Date(Date.UTC(y!, m! - 1, d! - 1)).toISOString().slice(0, 10);
+
+      // due on D is inside [D, …] and inside […, D], and outside both neighbours.
+      expect(due).toBeGreaterThanOrEqual(bound(buildTaskFilter({ dueAfter: day }), "gte"));
+      expect(due).toBeLessThan(bound(buildTaskFilter({ dueBefore: day }), "lt"));
+      expect(due).toBeLessThan(bound(buildTaskFilter({ dueAfter: nextDay }), "gte"));
+      expect(due).toBeGreaterThanOrEqual(bound(buildTaskFilter({ dueBefore: prevDay }), "lt"));
+    }
+
+    // A time on the last day of the window still counts as inside it.
+    const late = new Date(parseDueAt("2026-09-04T23:30")).getTime();
+    expect(late).toBeLessThan(bound(buildTaskFilter({ dueBefore: "2026-09-04" }), "lt"));
   });
 
   // Two tasks on the live board have no status at all; a bare status[neq]:DONE
@@ -227,6 +259,15 @@ describe("buildTaskUpdateBody", () => {
     expect(buildTaskUpdateBody({ title: "  ", dueAt: "2026-09-03T22:00:00.000Z" })).toEqual({ dueAt: "2026-09-03T22:00:00.000Z" });
   });
 
+  // The create path had this covered; the update path did not, so a regression
+  // that wrote markdown without blocknote would only have shown up in the UI.
+  it("writes markdown AND blocknote on an update too", () => {
+    const body = buildTaskUpdateBody({ body: "regel een\nregel twee" }) as
+      { bodyV2: { markdown: string; blocknote: string } };
+    expect(body.bodyV2.markdown).toBe("regel een\nregel twee");
+    expect(JSON.parse(body.bodyV2.blocknote)).toHaveLength(2);
+  });
+
   it("refuses an empty update", () => {
     expect(() => buildTaskUpdateBody({})).toThrow(/Nothing to write/);
     expect(() => buildTaskUpdateBody({ title: " ", fields: {} })).toThrow(RecordWriteError);
@@ -292,10 +333,9 @@ describe("write gate for tasks", () => {
     const dry = renderWriteDryRun("create", "tasks", { title: "t" }, undefined, undefined, ["linked to company c-1"]);
     expect(dry.indexOf("linked to company c-1")).toBeLessThan(dry.indexOf("Re-run with"));
     // Measured: a REST delete on a task drops the row, so the dry run must not
-    // reassure the operator with the generic "only a soft delete" line.
+    // reassure the operator that it can be undone.
     const del = renderWriteDryRun("delete", "tasks", null, "t-1");
-    expect(del).toContain("permanent");
-    expect(del).not.toContain("soft delete");
+    expect(del).toContain("Deleting is permanent: the task leaves the database");
     const text = renderWriteSuccess(
       { action: "update", object: "tasks", id: "t-1", url: `${BASE}/object/task/t-1` },
       { status: "DONE", bodyV2: { markdown: "x", blocknote: "[]" } },

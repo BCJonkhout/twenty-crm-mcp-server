@@ -240,11 +240,16 @@ async function runRecordCommand(
         throw new CliError("cato notes create needs --company-id and/or --person-id — an unattached note is unfindable.");
       }
       const noteBody = write.buildNoteBody(noteFlags);
-      if (gate.dryRun) { out(write.renderWriteDryRun("create", objectPath, noteBody)); return 0; }
       const linked = [
         noteFlags.companyId ? `linked to company ${noteFlags.companyId}` : null,
         noteFlags.personId ? `linked to person ${noteFlags.personId}` : null,
       ].filter((l): l is string => l !== null);
+      // The dry run shows the links too: which record a note lands on is the
+      // half of the plan the JSON body does not carry.
+      if (gate.dryRun) {
+        out(write.renderWriteDryRun("create", objectPath, noteBody, undefined, undefined, linked));
+        return 0;
+      }
       showWrite(
         await write.createNoteWithTargets(client, noteBody,
           { companyId: noteFlags.companyId, personId: noteFlags.personId }, baseUrl),
@@ -362,16 +367,19 @@ async function runTasks(
     const hint = tasks.statusHint(flagString(flags, "status"));
     if (hint) process.stderr.write(`${hint}\n`);
 
-    const targetIds = await tasks.taskIdsForTarget(client, {
-      companyId: flagString(flags, "company-id"),
-      personId: flagString(flags, "person-id"),
-      opportunityId: flagString(flags, "opportunity-id"),
-    });
+    // Plan first: a bad --status/--due-before combination should fail on the
+    // spot, not after a round-trip to taskTargets that is then thrown away.
     const planFlags: Record<string, FlagValue> = { ...flags };
     if (assigneeId) planFlags["assignee-id"] = assigneeId;
     if (query) planFlags.query = query;
     const plan = planList("tasks", planFlags);
     if (!plan.orderBy) plan.orderBy = tasks.DEFAULT_TASK_ORDER;
+
+    const targetIds = await tasks.taskIdsForTarget(client, {
+      companyId: flagString(flags, "company-id"),
+      personId: flagString(flags, "person-id"),
+      opportunityId: flagString(flags, "opportunity-id"),
+    });
 
     const rows = await tasks.fetchTasks(client, plan, targetIds);
     const [targets, members] = await Promise.all([

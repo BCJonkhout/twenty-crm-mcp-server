@@ -443,14 +443,18 @@ export function renderWriteDryRun(
       "to the rep who owns that account.");
   }
   if (action === "delete") {
-    // Measured on CATO v1.19, 2026-08-25: DELETE /rest/tasks/<id> takes the row
-    // out of the database — a probe task was gone from the workspace schema
-    // straight after, while 310 UI-soft-deleted rows sat there untouched. So the
-    // generic "it is only a soft delete" reassurance is false for tasks, and
-    // telling an operator a permanent action is reversible is the worse error.
-    lines.push("", object === "tasks"
-      ? "Deleting a task is permanent: the row leaves the database and cannot be restored."
-      : "Deleting is a soft delete in Twenty, but still hides the record everywhere.");
+    // This used to promise "it is only a soft delete". It is not. Twenty's REST
+    // delete takes a `soft_delete` query parameter that DEFAULTS TO FALSE — see
+    // cli/openapi/cato.yaml, generated from the live CRM: "If true, soft deletes
+    // the objects. If false, objects are permanently deleted." deleteRecord()
+    // never sends it, so every delete this CLI performs is permanent, for every
+    // object. Measured on CATO v1.19, 2026-08-25: a probe task was gone from the
+    // workspace schema straight after, while 310 UI-soft-deleted rows sat there
+    // untouched. Telling an operator a permanent action is reversible is the
+    // worse error, so the dry run now says what actually happens.
+    lines.push("",
+      `Deleting is permanent: the ${SINGULAR[object]} leaves the database and cannot be restored.`,
+      "(The trash in the CATO web UI is a soft delete; this is not.)");
   }
   lines.push("", "Re-run with --no-dry-run --yes to apply.");
   return lines.join("\n");

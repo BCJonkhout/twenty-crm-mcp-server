@@ -67,10 +67,24 @@ achternaam staan. Bij `people create` met `--company-id` neemt de CLI automatisc
 `accountOwnerId` van dat bedrijf over als eigenaar; zonder dat is de persoon onzichtbaar voor de
 Sales Rep die het account beheert. Met `--assignee-id` overrule je dat.
 
+> **`delete` is definitief, voor élk object.** Twenty's REST-delete kent een `soft_delete`-
+> parameter die standaard op `false` staat ("If false, objects are permanently deleted" — zie
+> `cli/openapi/cato.yaml`, gegenereerd uit de live CRM) en deze CLI stuurt hem niet mee. Gemeten
+> op CATO v1.19 (25-08-2026) met een wegwerptaak: de rij was daarna weg uit de database, terwijl
+> de 310 via de UI verwijderde rijen er gewoon nog stonden. De prullenbak in de web-UI is dus wel
+> een soft delete, deze niet. De dry-run zegt dat nu ook met zoveel woorden — hij beweerde eerder
+> het tegenovergestelde.
+>
+> Openstaand productbesluit: moet `cato people delete` / `cato companies delete` juist wel
+> `soft_delete=true` meesturen? Dat verandert gedrag op productiedata, dus dat is hier bewust
+> niet eenzijdig gedaan; alleen de tekst is naar de waarheid gebracht.
+
 ## Taken
 
-Het takenbord van PrudAI verhuist van Trello naar CATO; `cato tasks` is het schrijfpad dat
-`/memo-verwerken`, `/give-me-work`, `/trello-agenda` en `/trello-groom` daarvoor gebruiken.
+Het takenbord van PrudAI verhuist van Trello naar CATO. `cato tasks` is het schrijfpad dat
+`/memo-verwerken`, `/give-me-work`, `/trello-agenda` en `/trello-groom` daarvoor gaan gebruiken —
+die skills draaien op het moment van schrijven nog op Trello, dus dit is de kant die klaarstaat,
+niet een koppeling die al loopt.
 
 ```sh
 cato tasks list --status TODO --assignee beau
@@ -106,7 +120,15 @@ duidelijke 400 van de server op.
 **Deadlines** worden gelezen en getoond in Europe/Amsterdam, niet in de tijdzone van de host.
 `--due 2026-09-04` is middernacht hier (de UI toont de 4e, en de taak is verlopen vanaf het begin
 van die dag); `--due 2026-09-04T10:00` is 10:00 hier, DST-bewust. Een ISO-tijdstempel mét zone
-wordt letterlijk genomen. `--due-before 2026-09-04` is inclusief die hele dag.
+wordt letterlijk genomen.
+
+Belangrijk: `--due-before` en `--due-after` verankeren een kale dag in diezelfde zone, dus een
+zoekvenster bevat precies de taken die je er met `--due` in geschreven hebt. `--due-before
+2026-09-04` is inclusief die hele dag (de grens ligt op het begin van de 5e, hier). Toen die twee
+kanten niet gelijk liepen — schrijven in Amsterdam, filteren in UTC — sloeg `--due-after <dag>`
+stilzwijgend elke kaart van die dag over; dat is het soort fout dat een compleet ogend antwoord
+geeft, dus er staat nu een test op die de twee kanten tegen elkaar houdt in plaats van tegen een
+letterlijke grenswaarde.
 
 **Koppelen** gebeurt via `taskTargets`, net als bij notes. Mislukt het koppelen, dan wordt de taak
 weer verwijderd — een taak die aan niets hangt is een kaart die niemand terugvindt. Een taak
@@ -121,9 +143,8 @@ die zoektocht over. `--assignee me` bestaat niet: een API-sleutel ís geen works
 vlag hebben worden geweigerd, zodat niemand de datum- en status-normalisatie omzeilt. Bestaat het
 veld niet in CATO, dan zie je de 400 van de server.
 
-> **`tasks delete` is definitief.** Gemeten op CATO v1.19 (25-08-2026): een REST-delete haalt de
-> rij écht uit de database — anders dan de prullenbak in de UI komt de taak niet terug. Vandaar
-> dat de dry-run dat ook zo zegt.
+> **`tasks delete` is definitief** — net als elke andere `delete` in deze CLI; zie het kader
+> onder "Schrijven in het CRM".
 
 ## Wat is er naar deze persoon gestuurd?
 
@@ -268,6 +289,15 @@ en de CLI-commando's uit deze README.
 Aandachtspunt bij het bouwen: zet het achter dezelfde auth als de rest van de app. Een deel van deze
 documentatie beschrijft wie er mag verzenden — dat hoort niet publiek te staan.
 
+## Wijziging in datumvlaggen (25-08-2026)
+
+Alle datumvlaggen (`--due-before`, `--due-after`, `--created-since`, `--updated-since`,
+`--close-after`, `--close-before`) accepteren nog uitsluitend `YYYY-MM-DD` of een ISO-8601-
+tijdstempel. Vormen die JavaScript's `new Date()` eerder stilzwijgend slikte — `04-09-2026`,
+`2026/07/01`, `July 1, 2026`, `20260701` — leveren nu een foutmelding op in plaats van een
+antwoord over de verkeerde maand: `04-09-2026` werd gelezen als 9 april en `2026-02-30` als
+2 maart. Wie zo'n vorm gebruikte, ziet een expliciete melding met het juiste formaat erbij.
+
 ## Bekende afwijking
 
 `TWENTY_API_KEY` staat in platte tekst in `/root/librechat/.env` en in
@@ -283,7 +313,7 @@ alle drie de plekken meeneemt.
 
 ```sh
 bun run typecheck     # tsc over de hele monorepo
-bun test cli/tests    # unit tests van de CLI (113 tests)
+bun test cli/tests    # unit tests van de CLI
 bun test              # inclusief de MCP-E2E-tests; vereist TWENTY_API_KEY in de omgeving
 bun run openapi:generate   # regenereert openapi/cato.yaml uit de live metadata-API
 ```

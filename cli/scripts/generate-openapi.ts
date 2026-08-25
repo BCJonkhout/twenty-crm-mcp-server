@@ -7,7 +7,7 @@
 // that would guarantee drift, so this script *narrows* the live document
 // instead of re-describing it:
 //
-//   * keep only the four objects we want to expose to an external consumer
+//   * keep only the objects we want to expose to an external consumer
 //     (people, companies, opportunities, notes, tasks, taskTargets);
 //   * keep the verbs the CLI exposes; writes are described, not hidden, by
 //     construction, not by convention;

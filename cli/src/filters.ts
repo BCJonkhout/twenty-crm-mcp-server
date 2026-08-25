@@ -6,6 +6,7 @@
 // the same source.
 
 import { andExpr, clause, combineWithSoftDelete, orExpr, searchExpr } from "@twenty-crm/core";
+import { DAY_RE, zonedDayStartIso } from "./time.ts";
 
 /** MULTI_SELECT `product` on person and company. */
 export const PRODUCT_VALUES = ["LEO", "VERA", "ZIA", "BEVER", "IRMA", "ORDO", "CATO"] as const;
@@ -276,16 +277,14 @@ export function buildTaskFilter(input: TaskFilterInput): string | null {
     parts.push(clause("status", "eq", status));
   }
   if (input.assigneeId) parts.push(clause("assigneeId", "eq", input.assigneeId));
-  if (input.dueAfter) parts.push(clause("dueAt", "gte", isoDate("due-after", input.dueAfter)));
+  // A bare day is a day in Europe/Amsterdam, exactly as --due writes one. Read
+  // as UTC these bounds were off by the offset, so `--due-after 2026-09-04`
+  // missed every card written with `--due 2026-09-04` (stored 09-03T22:00Z).
+  if (input.dueAfter) parts.push(clause("dueAt", "gte", dueBound("due-after", input.dueAfter, 0)));
   if (input.dueBefore) {
-    // "before 4 September" on a task board means "by the end of the 4th", so a
-    // bare day becomes a strict bound on the next midnight. A full timestamp
-    // is taken literally.
-    if (/^\d{4}-\d{2}-\d{2}$/.test(input.dueBefore)) {
-      parts.push(clause("dueAt", "lt", nextDayIso(input.dueBefore)));
-    } else {
-      parts.push(clause("dueAt", "lte", isoDate("due-before", input.dueBefore)));
-    }
+    // "before 4 September" on a task board means "by the end of the 4th", so
+    // the bound is the start of the 5th, here, exclusive.
+    parts.push(clause("dueAt", "lt", dueBound("due-before", input.dueBefore, 1)));
   }
   if (input.overdue) {
     const now = (input.now ?? new Date()).toISOString();
@@ -299,13 +298,18 @@ export function buildTaskFilter(input: TaskFilterInput): string | null {
   return combineWithSoftDelete(andExpr(...parts), input.includeDeleted === true);
 }
 
-function nextDayIso(day: string): string {
-  const d = new Date(`${day}T00:00:00.000Z`);
-  if (Number.isNaN(d.getTime())) {
-    throw new FilterError(`--due-before: '${day}' is not a valid date. Use YYYY-MM-DD or an ISO timestamp.`);
+/**
+ * One end of a due-date window. A bare day is anchored at midnight in the
+ * team's zone and shifted by `plusDays` whole calendar days; anything else is
+ * a timestamp and is taken literally, zone and all.
+ */
+function dueBound(flag: string, value: string, plusDays: number): string {
+  if (DAY_RE.test(value.trim())) {
+    const iso = zonedDayStartIso(value, plusDays);
+    if (!iso) throw new FilterError(`--${flag}: '${value}' is not a real date.`);
+    return iso;
   }
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString();
+  return isoDate(flag, value);
 }
 
 // ---- helpers --------------------------------------------------------------
