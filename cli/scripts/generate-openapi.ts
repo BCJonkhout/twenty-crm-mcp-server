@@ -8,7 +8,7 @@
 // instead of re-describing it:
 //
 //   * keep only the four objects we want to expose to an external consumer
-//     (people, companies, opportunities, notes);
+//     (people, companies, opportunities, notes, tasks, taskTargets);
 //   * keep the verbs the CLI exposes; writes are described, not hidden, by
 //     construction, not by convention;
 //   * carry the transitive closure of every referenced component so the file
@@ -25,7 +25,9 @@ type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
 import { MARKETING_PATHS } from "./marketing-paths.ts";
 
-const EXPOSED_OBJECTS = ["people", "companies", "opportunities", "notes"] as const;
+// taskTargets rides along with tasks: without it a consumer can read a task
+// but not see which company/person/opportunity it hangs off.
+const EXPOSED_OBJECTS = ["people", "companies", "opportunities", "notes", "tasks", "taskTargets"] as const;
 
 /** Paths we keep, in output order. Everything else is dropped. */
 function keptPaths(): string[] {
@@ -42,7 +44,8 @@ appear in that document; they are described in cli/scripts/marketing-paths.ts
 and must be kept in step with the controllers by hand.
 
 WHAT IS IN HERE
-  * people, companies, opportunities, notes — list, get, create, update, delete;
+  * people, companies, opportunities, notes, tasks, taskTargets — list, get,
+    create, update, delete;
   * the full /marketing/* module: campaigns, company targets, contact research,
     contact selection candidates, members, review queue, assets and sending.
 

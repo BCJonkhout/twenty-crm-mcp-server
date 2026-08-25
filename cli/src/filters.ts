@@ -24,6 +24,25 @@ export const VISIBILITY_VALUES = ["MARKETING", "RESTRICTED"] as const;
 /** SELECT `stage` on opportunity. */
 export const OPPORTUNITY_STAGE_VALUES = ["NEW", "SCREENING", "MEETING", "PROPOSAL", "PILOT", "ON_HOLD", "CUSTOMER", "VERLOREN"] as const;
 
+/**
+ * SELECT `status` on task — the four the task board uses (metadata field
+ * 3f4bf3f2-1236-4c77-a1f5-241ba4eb64df; four legacy options are being removed
+ * on 2026-08-24). Unlike the stage enum this list is NOT enforced: the value is
+ * normalised and passed through, and CATO's field metadata decides. An unknown
+ * value comes back as HTTP 400 with the enum message, so a status added in the
+ * UI never waits for a CLI release — and a typo is still refused, by the CRM.
+ */
+export const TASK_STATUS_VALUES = ["TODO", "IN_PROGRESS", "ON_HOLD", "DONE"] as const;
+
+/** `in progress`, `in-progress`, `In_Progress` → `IN_PROGRESS`. */
+export function normaliseTaskStatus(value: string): string {
+  return value.trim().toUpperCase().replace(/[\s-]+/g, "_");
+}
+
+export function isKnownTaskStatus(value: string): boolean {
+  return (TASK_STATUS_VALUES as readonly string[]).includes(normaliseTaskStatus(value));
+}
+
 export class FilterError extends Error {}
 
 // The `is` operator takes the bare tokens NULL / NOT_NULL — quoting them
@@ -228,17 +247,100 @@ export function buildNoteFilter(input: NoteFilterInput): string | null {
   return combineWithSoftDelete(andExpr(...parts), input.includeDeleted === true);
 }
 
+// ---- tasks ----------------------------------------------------------------
+
+export interface TaskFilterInput {
+  status?: string;
+  assigneeId?: string;
+  /** Inclusive: a bare day means "due on or before that day". */
+  dueBefore?: string;
+  dueAfter?: string;
+  /** Due date in the past and not DONE (a task without a status counts as open). */
+  overdue?: boolean;
+  /** Reference instant for --overdue; injectable so the filter is testable. */
+  now?: Date;
+  /** Free-text term — AND-ed in as an ilike over the task title. */
+  search?: string;
+  raw?: string;
+  includeDeleted?: boolean;
+}
+
+export function buildTaskFilter(input: TaskFilterInput): string | null {
+  const parts: Array<string | null> = [];
+
+  if (input.status) {
+    const status = normaliseTaskStatus(input.status);
+    if (input.overdue && status === "DONE") {
+      throw new FilterError("--overdue only covers open tasks; drop --status DONE.");
+    }
+    parts.push(clause("status", "eq", status));
+  }
+  if (input.assigneeId) parts.push(clause("assigneeId", "eq", input.assigneeId));
+  if (input.dueAfter) parts.push(clause("dueAt", "gte", isoDate("due-after", input.dueAfter)));
+  if (input.dueBefore) {
+    // "before 4 September" on a task board means "by the end of the 4th", so a
+    // bare day becomes a strict bound on the next midnight. A full timestamp
+    // is taken literally.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(input.dueBefore)) {
+      parts.push(clause("dueAt", "lt", nextDayIso(input.dueBefore)));
+    } else {
+      parts.push(clause("dueAt", "lte", isoDate("due-before", input.dueBefore)));
+    }
+  }
+  if (input.overdue) {
+    const now = (input.now ?? new Date()).toISOString();
+    parts.push(clause("dueAt", "lt", now));
+    // A NULL status is an open task too: status[neq] alone would drop it.
+    parts.push(orExpr(isNull("status"), clause("status", "neq", "DONE")));
+  }
+  if (input.search) parts.push(searchExpr("tasks", input.search));
+  if (input.raw) parts.push(input.raw);
+
+  return combineWithSoftDelete(andExpr(...parts), input.includeDeleted === true);
+}
+
+function nextDayIso(day: string): string {
+  const d = new Date(`${day}T00:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) {
+    throw new FilterError(`--due-before: '${day}' is not a valid date. Use YYYY-MM-DD or an ISO timestamp.`);
+  }
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString();
+}
+
 // ---- helpers --------------------------------------------------------------
 
 /**
  * Accept both `2026-07-01` and a full ISO timestamp; reject anything else
  * loudly rather than shipping `Invalid Date` into a production query.
  */
+/** `2026-09-04T10:00`, `2026-09-04 10:00:30.5`, `…Z`, `…+02:00` — but nothing else. */
+const ISO_TIMESTAMP_RE =
+  /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/;
+
+/**
+ * A date flag takes YYYY-MM-DD or an ISO-8601 timestamp — and nothing else.
+ * `new Date()` alone is far too willing: it reads `04-09-2026` as 9 April 2026
+ * and `2026-02-30` as 2 March, so a mistyped `--due-before` used to return a
+ * confident answer about the wrong month instead of an error.
+ */
 export function isoDate(flag: string, value: string): string {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return `${value}T00:00:00.000Z`;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) {
-    throw new FilterError(`--${flag}: '${value}' is not a valid date. Use YYYY-MM-DD or an ISO timestamp.`);
+  const v = value.trim();
+  const reject = () => {
+    throw new FilterError(
+      `--${flag}: '${value}' is not a valid date. Use YYYY-MM-DD or an ISO-8601 timestamp (2026-09-04T10:00:00Z).`,
+    );
+  };
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const day = new Date(`${v}T00:00:00.000Z`);
+    // Round-trip catches the days that do not exist (2026-02-30 → 2 March).
+    if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== v) reject();
+    return `${v}T00:00:00.000Z`;
   }
-  return d.toISOString();
+  if (ISO_TIMESTAMP_RE.test(v)) {
+    const d = new Date(v);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  reject();
+  throw new Error("unreachable");
 }

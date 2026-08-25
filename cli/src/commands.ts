@@ -2,13 +2,16 @@
 // flags and help text. `args.ts` parses against this; `index.ts` dispatches on it.
 
 import type { FlagSpecs } from "./args.ts";
-import { BRANCHE_VALUES, OPPORTUNITY_STAGE_VALUES, PRODUCT_VALUES, SALES_STATUS_VALUES } from "./filters.ts";
+import {
+  BRANCHE_VALUES, OPPORTUNITY_STAGE_VALUES, PRODUCT_VALUES, SALES_STATUS_VALUES, TASK_STATUS_VALUES,
+} from "./filters.ts";
 
 export const COMMAND_TREE: Record<string, readonly string[]> = {
   people: ["list", "get", "search", "create", "update", "delete", "history"],
   companies: ["list", "get", "search", "create", "update", "delete"],
   opportunities: ["list", "create", "update"],
   notes: ["list", "create", "update"],
+  tasks: ["list", "get", "search", "create", "update", "complete", "delete"],
   segments: ["build"],
   import: [],
   auth: ["create", "set", "list", "revoke", "status", "whoami", "roles"],
@@ -81,6 +84,41 @@ const NOTE_FILTER_FLAGS: FlagSpecs = {
   title: { type: "string", placeholder: "<text>", description: "Substring match on the note title." },
   "assignee-id": { type: "string", placeholder: "<uuid>", description: "Only notes assigned to this workspace member." },
   "created-since": { type: "string", placeholder: "<date>", description: "createdAt >= date." },
+};
+
+const TASK_STATUS_HELP = `One of: ${TASK_STATUS_VALUES.join(", ")} (case-insensitive; other values are passed to CATO, which decides).`;
+
+const TASK_FILTER_FLAGS: FlagSpecs = {
+  status: { type: "string", placeholder: "<value>", description: TASK_STATUS_HELP },
+  "assignee-id": { type: "string", placeholder: "<uuid>", description: "Only tasks assigned to this workspace member." },
+  assignee: { type: "string", placeholder: "<name|email>", description: "Same, by first name, last name or e-mail (looked up in the workspace)." },
+  "due-before": { type: "string", placeholder: "<date>", description: "Due on or before this day (YYYY-MM-DD, inclusive) or timestamp." },
+  "due-after": { type: "string", placeholder: "<date>", description: "dueAt >= YYYY-MM-DD or ISO timestamp." },
+  overdue: { type: "boolean", description: "Due date in the past and not DONE." },
+  "company-id": { type: "string", placeholder: "<uuid>", description: "Only tasks linked to this company (via taskTargets)." },
+  "person-id": { type: "string", placeholder: "<uuid>", description: "Only tasks linked to this person." },
+  "opportunity-id": { type: "string", placeholder: "<uuid>", description: "Only tasks linked to this opportunity." },
+};
+
+const TASK_UPDATE_FLAGS: FlagSpecs = {
+  title: { type: "string", placeholder: "<text>", description: "Task title." },
+  body: { type: "string", placeholder: "<text>", description: "Task body (markdown). Use --body-file for anything longer than a line." },
+  "body-file": { type: "string", placeholder: "<path>", description: "Read the task body from a file." },
+  status: { type: "string", placeholder: "<value>", description: TASK_STATUS_HELP },
+  due: { type: "string", placeholder: "<YYYY-MM-DD[THH:MM]>", description: "Due date; day or wall-clock time in Europe/Amsterdam, or an ISO timestamp with zone." },
+  "assignee-id": { type: "string", placeholder: "<uuid>", description: "Workspace member the task is assigned to." },
+  assignee: { type: "string", placeholder: "<name|email>", description: "Same, by first name, last name or e-mail." },
+  field: {
+    type: "string[]", noSplit: true, placeholder: "<key=value>",
+    description: "Extra field to write, repeatable. key=value writes a string; key:=<json> writes JSON (number, boolean, null, list).",
+  },
+};
+
+const TASK_WRITE_FLAGS: FlagSpecs = {
+  ...TASK_UPDATE_FLAGS,
+  "company-id": { type: "string", placeholder: "<uuid>", description: "Link the task to this company." },
+  "person-id": { type: "string", placeholder: "<uuid>", description: "Link the task to this person." },
+  "opportunity-id": { type: "string", placeholder: "<uuid>", description: "Link the task to this opportunity." },
 };
 
 const SEARCH_FLAGS: FlagSpecs = {
@@ -199,6 +237,11 @@ export function flagSpecsFor(command: readonly string[]): FlagSpecs {
       if (sub === "create") return NOTE_WRITE_FLAGS;
       if (sub === "update") return NOTE_UPDATE_FLAGS;
       return { ...COMMON_READ_FLAGS, ...NOTE_FILTER_FLAGS };
+    case "tasks":
+      if (sub === "create") return TASK_WRITE_FLAGS;
+      if (sub === "update") return TASK_UPDATE_FLAGS;
+      if (sub === "get" || sub === "complete" || sub === "delete") return {};
+      return { ...COMMON_READ_FLAGS, ...TASK_FILTER_FLAGS, ...(sub === "search" ? SEARCH_FLAGS : {}) };
     case "segments":
       return SEGMENT_FLAGS;
     case "import":
@@ -225,6 +268,13 @@ export const COMMAND_SUMMARIES: Record<string, string> = {
   "notes list": "List notes.",
   "notes create": "Create a note and attach it to a company and/or person. Needs --no-dry-run --yes.",
   "notes update": "Update a note's title and/or body by id. Links stay untouched. Needs --no-dry-run --yes.",
+  "tasks list": "List tasks: status, due date, assignee and the company/person/opportunity they hang off.",
+  "tasks get": "Fetch one task by id, with its body (markdown), targets and assignee.",
+  "tasks search": "Search tasks by title (case-insensitive substring), with the same filters as list.",
+  "tasks create": "Create a task, optionally linked to a company/person/opportunity. Needs --no-dry-run --yes.",
+  "tasks update": "Update a task by id — title, status, due date, assignee, body, custom fields. Links stay untouched. Needs --no-dry-run --yes.",
+  "tasks complete": "Mark a task DONE (shorthand for update --status DONE). Needs --no-dry-run --yes.",
+  "tasks delete": "Delete a task by id. Permanent — unlike the UI's delete, the row does not come back. Needs --no-dry-run --yes.",
   "segments build": "Build a target-audience selection from filters and write it out as JSON/CSV.",
   import: "Analyse a CSV; with --source-system also tag/create companies. Needs --no-dry-run --yes.",
   "people create": "Create a person. Inherits the company's account owner so the record stays visible.",

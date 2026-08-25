@@ -128,6 +128,7 @@ export async function createTargetsForRecord(
   recordId: string,
   targetPersonIds: string[] = [],
   targetCompanyIds: string[] = [],
+  targetOpportunityIds: string[] = [],
 ): Promise<unknown[]> {
   const endpoint = type === "note" ? "/rest/noteTargets" : "/rest/taskTargets";
   const idField = type === "note" ? "noteId" : "taskId";
@@ -143,6 +144,16 @@ export async function createTargetsForRecord(
     const target = await client.request(endpoint, {
       method: "POST",
       body: { [idField]: recordId, targetCompanyId: companyId },
+    });
+    created.push(target);
+  }
+  // Both target tables carry targetOpportunityId (verified on crm.prudai.com
+  // v1.19: noteTarget and taskTarget expose targetCompany/targetPerson/
+  // targetOpportunity as morph relations).
+  for (const opportunityId of targetOpportunityIds ?? []) {
+    const target = await client.request(endpoint, {
+      method: "POST",
+      body: { [idField]: recordId, targetOpportunityId: opportunityId },
     });
     created.push(target);
   }
