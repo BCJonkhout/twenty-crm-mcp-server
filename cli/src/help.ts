@@ -37,6 +37,8 @@ export function topLevelHelp(): string {
     "  cato people list --branche ADVOCATUUR --contactable --limit 50 --csv",
     "  cato companies list --city Enschede --json",
     "  cato segments build --name twente-advocaten --branche ADVOCATUUR --city Enschede --wave-size 100 --csv",
+    "  cato tasks list --overdue --assignee beau",
+    "  cato tasks create --title \"Bel terug\" --company-id <uuid> --due 2026-09-04 --no-dry-run --yes",
     "  cato import --csv leads.csv               # dry run, always",
     "  cato marketing touchpoints --campaign <id> --state pending",
     "",

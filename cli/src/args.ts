@@ -14,6 +14,12 @@ export interface FlagSpec {
   description: string;
   /** Placeholder shown in help for value-taking flags. */
   placeholder?: string;
+  /**
+   * For `string[]` flags: keep each occurrence as one value instead of also
+   * splitting on commas. Needed when the value itself may contain a comma
+   * (`--field labels=a,b`); the flag is then repeatable only.
+   */
+  noSplit?: boolean;
 }
 
 export type FlagSpecs = Record<string, FlagSpec>;
@@ -201,7 +207,10 @@ export function parseArgs(
 
     if (spec.type === "string[]") {
       // Repeatable AND comma-separable: --product LEO --product VERA == --product LEO,VERA
-      const parts = value.split(",").map((p) => p.trim()).filter(Boolean);
+      // (unless the spec says noSplit — then only repeatable).
+      const parts = spec.noSplit
+        ? [value]
+        : value.split(",").map((p) => p.trim()).filter(Boolean);
       const existing = flags[canonical];
       flags[canonical] = Array.isArray(existing) ? [...existing, ...parts] : parts;
       continue;

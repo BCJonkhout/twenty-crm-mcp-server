@@ -8,7 +8,7 @@
 
 import { createRestClient, type RestClient } from "@twenty-crm/core";
 import {
-  flagBool, flagNumber, flagString, parseArgs, resolveWriteGate, type FlagValue,
+  flagBool, flagList, flagNumber, flagString, parseArgs, resolveWriteGate, type FlagValue,
 } from "./args.ts";
 import { COMMAND_TREE, flagSpecsFor } from "./commands.ts";
 import { commandHelp, topLevelHelp, VERSION } from "./help.ts";
@@ -29,6 +29,7 @@ import * as marketing from "./commands/marketing.ts";
 import * as build from "./commands/campaignBuild.ts";
 import * as api from "./commands/marketingApi.ts";
 import * as write from "./commands/recordWrite.ts";
+import * as tasks from "./commands/tasks.ts";
 import * as verify from "./commands/researchVerify.ts";
 import { DEFAULT_BASE_URL, indexUrl, marketingUrl, recordUrl } from "./urls.ts";
 import { createGraphQLTransport, currentWorkspace } from "./auth-api.ts";
@@ -143,6 +144,8 @@ async function main(argv: string[]): Promise<number> {
     case "opportunities":
     case "notes":
       return runRecordCommand(group as ObjectPath, sub!, parsed.positionals, parsed.flags, ctx);
+    case "tasks":
+      return runTasks(sub!, parsed.positionals, parsed.flags, ctx);
     case "segments":
       return runSegments(parsed.flags, ctx);
     case "import":
@@ -168,8 +171,8 @@ async function runRecordCommand(
   const baseUrl = ctx.baseUrl ?? DEFAULT_BASE_URL;
 
   if (sub === "create" || sub === "update" || sub === "delete") {
-    if (objectPath === "notes" && sub !== "create") {
-      throw new CliError(`cato notes ${sub} is not supported.`);
+    if (objectPath === "notes" && sub === "delete") {
+      throw new CliError("cato notes delete is not supported.");
     }
     if (objectPath === "opportunities" && sub === "delete") {
       throw new CliError("cato opportunities delete is not supported — move the stage to VERLOREN instead.");
@@ -226,15 +229,27 @@ async function runRecordCommand(
         title: flagString(flags, "title"), body: noteText,
         companyId: flagString(flags, "company-id"), personId: flagString(flags, "person-id"),
       };
+      if (sub === "update") {
+        if (!id) throw new CliError("cato notes update needs a note id.");
+        const patchBody = write.buildNoteUpdateBody(noteFlags);
+        if (gate.dryRun) { out(write.renderWriteDryRun("update", objectPath, patchBody, id)); return 0; }
+        showWrite(await write.updateRecord(client, objectPath, id, patchBody, baseUrl), patchBody, ctx);
+        return 0;
+      }
       if (!noteFlags.companyId && !noteFlags.personId) {
         throw new CliError("cato notes create needs --company-id and/or --person-id — an unattached note is unfindable.");
       }
       const noteBody = write.buildNoteBody(noteFlags);
-      if (gate.dryRun) { out(write.renderWriteDryRun("create", objectPath, noteBody)); return 0; }
       const linked = [
         noteFlags.companyId ? `linked to company ${noteFlags.companyId}` : null,
         noteFlags.personId ? `linked to person ${noteFlags.personId}` : null,
       ].filter((l): l is string => l !== null);
+      // The dry run shows the links too: which record a note lands on is the
+      // half of the plan the JSON body does not carry.
+      if (gate.dryRun) {
+        out(write.renderWriteDryRun("create", objectPath, noteBody, undefined, undefined, linked));
+        return 0;
+      }
       showWrite(
         await write.createNoteWithTargets(client, noteBody,
           { companyId: noteFlags.companyId, personId: noteFlags.personId }, baseUrl),
@@ -314,6 +329,142 @@ async function runRecordCommand(
 
   out(await runList(client, objectPath, flags, ctx));
   return 0;
+}
+
+/** Reads --body / --body-file the way notes do: a file's trailing newline is dropped. */
+async function readBodyFlags(flags: Record<string, FlagValue>): Promise<string | undefined> {
+  const bodyFile = flagString(flags, "body-file");
+  if (!bodyFile) return flagString(flags, "body");
+  try {
+    return (await Bun.file(bodyFile).text()).replace(/\s+$/, "");
+  } catch {
+    throw new CliError(`Cannot read --body-file '${bodyFile}'.`);
+  }
+}
+
+async function runTasks(
+  sub: string,
+  positionals: string[],
+  flags: Record<string, FlagValue>,
+  ctx: { json: boolean; csv: boolean; baseUrl?: string },
+): Promise<number> {
+  const creds = await resolveAuth(flags);
+  const client = restClient(creds);
+  const baseUrl = ctx.baseUrl ?? DEFAULT_BASE_URL;
+  const id = positionals[0];
+
+  // --assignee <name|email> is resolved once, for the list filter and the
+  // write verbs alike; --assignee-id is taken as-is.
+  let assigneeId = flagString(flags, "assignee-id");
+  const assigneeText = flagString(flags, "assignee");
+  if (assigneeText) {
+    assigneeId = tasks.resolveMember(await tasks.listWorkspaceMembers(client), assigneeText).id;
+  }
+
+  if (sub === "list" || sub === "search") {
+    const query = flagString(flags, "query") ?? (sub === "search" ? positionals[0] : undefined);
+    if (sub === "search" && !query?.trim()) throw new CliError("cato tasks search needs a search term.");
+    const hint = tasks.statusHint(flagString(flags, "status"));
+    if (hint) process.stderr.write(`${hint}\n`);
+
+    // Plan first: a bad --status/--due-before combination should fail on the
+    // spot, not after a round-trip to taskTargets that is then thrown away.
+    const planFlags: Record<string, FlagValue> = { ...flags };
+    if (assigneeId) planFlags["assignee-id"] = assigneeId;
+    if (query) planFlags.query = query;
+    const plan = planList("tasks", planFlags);
+    if (!plan.orderBy) plan.orderBy = tasks.DEFAULT_TASK_ORDER;
+
+    const targetIds = await tasks.taskIdsForTarget(client, {
+      companyId: flagString(flags, "company-id"),
+      personId: flagString(flags, "person-id"),
+      opportunityId: flagString(flags, "opportunity-id"),
+    });
+
+    const rows = await tasks.fetchTasks(client, plan, targetIds);
+    const [targets, members] = await Promise.all([
+      tasks.fetchTargetsForTasks(client, rows.map((r) => String(r.id ?? ""))),
+      tasks.listWorkspaceMembers(client),
+    ]);
+    out(tasks.renderTaskList(tasks.enrichTasks(rows, targets, members, baseUrl),
+      { json: ctx.json, csv: ctx.csv, columns: flagList(flags, "fields") }));
+    return 0;
+  }
+
+  if (sub === "get") {
+    if (!id) throw new CliError("cato tasks get needs a task id as its argument.");
+    const task = await tasks.fetchTask(client, id);
+    if (!task) { out(tasks.renderTaskDetail(null, ctx)); return 0; }
+    const [targets, members] = await Promise.all([
+      tasks.fetchTargetsForTasks(client, [id]),
+      tasks.listWorkspaceMembers(client),
+    ]);
+    out(tasks.renderTaskDetail(tasks.enrichTasks([task], targets, members, baseUrl)[0]!, ctx));
+    return 0;
+  }
+
+  const gate = resolveWriteGate(flags);
+  if (gate.blockedReason) throw new CliError(gate.blockedReason);
+
+  if (sub === "delete") {
+    if (!id) throw new CliError("cato tasks delete needs a task id.");
+    if (gate.dryRun) { out(write.renderWriteDryRun("delete", "tasks", null, id)); return 0; }
+    showWrite(await write.deleteRecord(client, "tasks", id), null, ctx);
+    return 0;
+  }
+
+  if (sub === "complete") {
+    if (!id) throw new CliError("cato tasks complete needs a task id.");
+    const body = { status: "DONE" };
+    if (gate.dryRun) { out(write.renderWriteDryRun("update", "tasks", body, id)); return 0; }
+    showWrite(await write.updateRecord(client, "tasks", id, body, baseUrl), body, ctx);
+    return 0;
+  }
+
+  const due = flagString(flags, "due");
+  const taskFlags: write.TaskFlags = {
+    title: flagString(flags, "title"),
+    body: await readBodyFlags(flags),
+    status: flagString(flags, "status"),
+    dueAt: due ? tasks.parseDueAt(due) : undefined,
+    assigneeId,
+    fields: write.parseFieldAssignments(flagList(flags, "field") ?? []),
+  };
+  const hint = tasks.statusHint(taskFlags.status);
+  // In a dry run the hint travels with the plan; for a real write it belongs on
+  // stderr before the request, so it is on screen even when CATO then refuses.
+  if (hint && !gate.dryRun) process.stderr.write(`${hint}\n`);
+
+  if (sub === "update") {
+    if (!id) throw new CliError("cato tasks update needs a task id.");
+    const patch = write.buildTaskUpdateBody(taskFlags);
+    if (gate.dryRun) {
+      out(write.renderWriteDryRun("update", "tasks", patch, id));
+      if (hint) out(`\n${hint}`);
+      return 0;
+    }
+    showWrite(await write.updateRecord(client, "tasks", id, patch, baseUrl), patch, ctx);
+    return 0;
+  }
+
+  if (sub === "create") {
+    const body = write.buildTaskBody(taskFlags);
+    const targets: write.TaskTargets = {
+      companyId: flagString(flags, "company-id"),
+      personId: flagString(flags, "person-id"),
+      opportunityId: flagString(flags, "opportunity-id"),
+    };
+    const linked = write.describeTaskTargets(targets);
+    if (gate.dryRun) {
+      out(write.renderWriteDryRun("create", "tasks", body, undefined, undefined, linked));
+      if (hint) out(`\n${hint}`);
+      return 0;
+    }
+    showWrite(await write.createTaskWithTargets(client, body, targets, baseUrl), body, ctx, linked);
+    return 0;
+  }
+
+  throw new CliError(`Unknown tasks subcommand '${sub}'.`);
 }
 
 async function runSegments(
@@ -1039,7 +1190,8 @@ async function runMarketing(
 
 const code = await main(process.argv.slice(2)).catch((err: unknown) => {
   const e = err as Error;
-  if (e instanceof CliError || e instanceof FilterError || e instanceof auth.AuthError || e instanceof marketing.MarketingAuthError) {
+  if (e instanceof CliError || e instanceof FilterError || e instanceof auth.AuthError ||
+      e instanceof marketing.MarketingAuthError || e instanceof write.RecordWriteError || e instanceof tasks.TaskError) {
     process.stderr.write(`error: ${e.message}\n`);
     return 2;
   }

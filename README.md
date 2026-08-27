@@ -237,7 +237,7 @@ Run arbitrary read-only SQL inside the Twenty Postgres container. Guards:
 - `batch_upsert_people` — parallel upsert; dedup order: `emails.primaryEmail` → `firstName+lastName+companyId`.
 - `batch_upsert_companies` — parallel upsert; dedup order: `domainName` → `name+city` → `name`.
 - `bulk_update_by_filter` — patch every record matching a filter; `dryRun: true` by default.
-- `merge_people` — merge duplicates into a primary: re-points noteTargets/taskTargets, copies null-on-primary fields, soft-deletes duplicates.
+- `merge_people` — merge duplicates into a primary: re-points noteTargets/taskTargets, copies null-on-primary fields, then **permanently deletes** the duplicates.
 - `link_person_to_company` — shortcut to set `companyId` on a person.
 - `bulk_attach_note` — attach one existing note to many persons/companies in one call.
 

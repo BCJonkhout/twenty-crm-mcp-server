@@ -1,5 +1,5 @@
 // Write path for the CRM objects the CLI can change: people, companies,
-// opportunities and notes.
+// opportunities, notes and tasks.
 //
 // Twenty stores names, emails, phones, money and rich text as composite fields;
 // `transformPersonData`, `transformCompanyData` and `transformBodyField` in core
@@ -11,15 +11,15 @@ import {
   createTargetsForRecord, extractId, transformBodyField,
   transformCompanyData, transformPersonData,
 } from "@twenty-crm/core";
-import { OPPORTUNITY_STAGE_VALUES } from "../filters.ts";
+import { normaliseTaskStatus, OPPORTUNITY_STAGE_VALUES } from "../filters.ts";
 import { recordUrl } from "../urls.ts";
 
 export class RecordWriteError extends Error {}
 
-export type WritableObject = "people" | "companies" | "opportunities" | "notes";
+export type WritableObject = "people" | "companies" | "opportunities" | "notes" | "tasks";
 
 const SINGULAR: Record<WritableObject, string> = {
-  people: "person", companies: "company", opportunities: "opportunity", notes: "note",
+  people: "person", companies: "company", opportunities: "opportunity", notes: "note", tasks: "task",
 };
 
 /**
@@ -47,6 +47,22 @@ export interface OpportunityFlags {
 
 export interface NoteFlags {
   title?: string; body?: string; companyId?: string; personId?: string;
+}
+
+export interface TaskFlags {
+  title?: string;
+  /** Markdown; becomes bodyV2 (markdown + blocknote) like a note body. */
+  body?: string;
+  status?: string;
+  /** Already an ISO timestamp — see parseDueAt in commands/tasks.ts. */
+  dueAt?: string;
+  assigneeId?: string;
+  /** Pass-through fields from --field key=value (custom fields such as `bord`). */
+  fields?: Record<string, unknown>;
+}
+
+export interface TaskTargets {
+  companyId?: string; personId?: string; opportunityId?: string;
 }
 
 /** Drops undefined/blank flags so an update never blanks a field by accident. */
@@ -121,6 +137,130 @@ export function buildNoteBody(flags: NoteFlags): Record<string, unknown> {
   }
   return transformBodyField({ title: flags.title, body: flags.body });
 }
+
+/** Update-half of the note write path: PATCH only the fields that were passed. */
+export function buildNoteUpdateBody(flags: NoteFlags): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (flags.title?.trim()) body.title = flags.title;
+  if (flags.body !== undefined && flags.body.trim() !== "") {
+    Object.assign(body, transformBodyField({ body: flags.body }));
+  }
+  if (Object.keys(body).length === 0) {
+    throw new RecordWriteError("Nothing to write: pass --title, --body or --body-file.");
+  }
+  return body;
+}
+
+// ---- tasks ----------------------------------------------------------------
+
+/**
+ * Fields that have a dedicated flag. `--field` exists for custom fields the
+ * flags do not know yet (`bord`, `labels`); letting it also carry `status` or
+ * `dueAt` would route those around the normalisation and date parsing.
+ */
+export const TASK_FLAG_OWNED_FIELDS = new Set([
+  "title", "status", "dueAt", "assigneeId", "bodyV2", "body",
+  "id", "createdAt", "updatedAt", "deletedAt", "createdBy", "updatedBy",
+]);
+
+/**
+ * `--field key=value` → string, `--field key:=<json>` → parsed JSON (number,
+ * boolean, null, array, object). The key is only checked for shape; whether the
+ * field exists is CATO's call, and its 400 is shown as-is.
+ */
+export function parseFieldAssignments(
+  items: readonly string[],
+  owned: ReadonlySet<string> = TASK_FLAG_OWNED_FIELDS,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const item of items) {
+    const m = /^([A-Za-z][A-Za-z0-9]*)(:?=)([\s\S]*)$/.exec(item);
+    if (!m) throw new RecordWriteError(`--field expects key=value or key:=<json>, got '${item}'.`);
+    const [, key, op, raw] = m as unknown as [string, string, string, string];
+    if (owned.has(key)) {
+      throw new RecordWriteError(`--field ${key}: that field has its own flag — use it instead of --field.`);
+    }
+    if (op === ":=") {
+      try { out[key] = JSON.parse(raw); }
+      catch { throw new RecordWriteError(`--field ${key}: '${raw}' is not valid JSON (use key=value for a plain string).`); }
+    } else {
+      out[key] = raw;
+    }
+  }
+  return out;
+}
+
+export function buildTaskBody(flags: TaskFlags): Record<string, unknown> {
+  if (!flags.title?.trim()) throw new RecordWriteError("cato tasks create needs --title.");
+  const body: Record<string, unknown> = { ...(flags.fields ?? {}), title: flags.title.trim() };
+  if (flags.body !== undefined && flags.body.trim() !== "") {
+    Object.assign(body, transformBodyField({ body: flags.body }));
+  }
+  if (flags.status?.trim()) body.status = normaliseTaskStatus(flags.status);
+  if (flags.dueAt) body.dueAt = flags.dueAt;
+  if (flags.assigneeId) body.assigneeId = flags.assigneeId;
+  return body;
+}
+
+/** PATCH only what was passed; links (taskTargets) are never touched here. */
+export function buildTaskUpdateBody(flags: TaskFlags): Record<string, unknown> {
+  const body: Record<string, unknown> = { ...(flags.fields ?? {}) };
+  if (flags.title?.trim()) body.title = flags.title.trim();
+  if (flags.body !== undefined && flags.body.trim() !== "") {
+    Object.assign(body, transformBodyField({ body: flags.body }));
+  }
+  if (flags.status?.trim()) body.status = normaliseTaskStatus(flags.status);
+  if (flags.dueAt) body.dueAt = flags.dueAt;
+  if (flags.assigneeId) body.assigneeId = flags.assigneeId;
+  if (Object.keys(body).length === 0) {
+    throw new RecordWriteError(
+      "Nothing to write: pass --title, --status, --due, --assignee-id, --body/--body-file or --field.",
+    );
+  }
+  return body;
+}
+
+/**
+ * Same contract as createNoteWithTargets: a task that was meant to hang off a
+ * company/person/opportunity but lost its link is a card nobody finds, so a
+ * failed link removes the task again. A task without any target is fine — the
+ * board also holds plain to-dos.
+ */
+export async function createTaskWithTargets(
+  client: RestClient,
+  body: Record<string, unknown>,
+  targets: TaskTargets,
+  baseUrl: string,
+): Promise<WriteOutcome> {
+  const created = await client.request(`/rest/tasks`, { method: "POST", body });
+  const id = extractId(created);
+  if (!id) throw new RecordWriteError("Creating the task failed: no id came back.");
+  try {
+    await createTargetsForRecord(
+      client, "task", id,
+      targets.personId ? [targets.personId] : [],
+      targets.companyId ? [targets.companyId] : [],
+      targets.opportunityId ? [targets.opportunityId] : [],
+    );
+  } catch (err) {
+    await client.request(`/rest/tasks/${id}`, { method: "DELETE" }).catch(() => {});
+    throw new RecordWriteError(
+      `Linking the task to its record failed, so task ${id} was removed again: ${String(err)}`,
+    );
+  }
+  return { action: "create", object: "tasks", id, url: recordUrl(baseUrl, "task", id) };
+}
+
+/** The "linked to …" lines a create confirms, for dry-run and success alike. */
+export function describeTaskTargets(targets: TaskTargets): string[] {
+  return [
+    targets.companyId ? `linked to company ${targets.companyId}` : null,
+    targets.personId ? `linked to person ${targets.personId}` : null,
+    targets.opportunityId ? `linked to opportunity ${targets.opportunityId}` : null,
+  ].filter((l): l is string => l !== null);
+}
+
+// ---- opportunities --------------------------------------------------------
 
 /**
  * One open opportunity per company. Three cards for one deal is the failure mode
@@ -287,6 +427,8 @@ export function renderWriteDryRun(
   body: Record<string, unknown> | null,
   id?: string,
   inheritedFrom?: string,
+  /** Extra lines (e.g. "linked to company …") shown before the footer. */
+  extra: readonly string[] = [],
 ): string {
   const lines = [
     `DRY RUN — no ${SINGULAR[object]} was ${action}d.`,
@@ -295,11 +437,25 @@ export function renderWriteDryRun(
   ];
   if (id) lines.push(`Id    : ${id}`);
   if (body) lines.push("Body  :", ...JSON.stringify(body, null, 2).split("\n").map((l) => `  ${l}`));
+  for (const line of extra) lines.push(`  ${line}`);
   if (inheritedFrom) {
     lines.push("", `Assignee inherited from company ${inheritedFrom}, so the record stays visible`,
       "to the rep who owns that account.");
   }
-  if (action === "delete") lines.push("", "Deleting is a soft delete in Twenty, but still hides the record everywhere.");
+  if (action === "delete") {
+    // This used to promise "it is only a soft delete". It is not. Twenty's REST
+    // delete takes a `soft_delete` query parameter that DEFAULTS TO FALSE — see
+    // cli/openapi/cato.yaml, generated from the live CRM: "If true, soft deletes
+    // the objects. If false, objects are permanently deleted." deleteRecord()
+    // never sends it, so every delete this CLI performs is permanent, for every
+    // object. Measured on CATO v1.19, 2026-08-25: a probe task was gone from the
+    // workspace schema straight after, while 310 UI-soft-deleted rows sat there
+    // untouched. Telling an operator a permanent action is reversible is the
+    // worse error, so the dry run now says what actually happens.
+    lines.push("",
+      `Deleting is permanent: the ${SINGULAR[object]} leaves the database and cannot be restored.`,
+      "(The trash in the CATO web UI is a soft delete; this is not.)");
+  }
   lines.push("", "Re-run with --no-dry-run --yes to apply.");
   return lines.join("\n");
 }

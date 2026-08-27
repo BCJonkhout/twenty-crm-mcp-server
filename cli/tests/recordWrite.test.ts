@@ -127,8 +127,16 @@ describe("renderWriteDryRun", () => {
     expect(text).toContain("inherited from company c-1");
   });
 
-  it("warns that a delete hides the record", () => {
-    expect(renderWriteDryRun("delete", "companies", null, "c-1")).toContain("hides the record");
+  // Twenty's REST delete defaults to soft_delete=false and deleteRecord never
+  // sends the flag, so this is a permanent delete for every object. The dry run
+  // must not reassure the operator that it can be undone.
+  it("warns that a delete is permanent, for every object", () => {
+    for (const object of ["people", "companies", "notes", "tasks"] as const) {
+      const text = renderWriteDryRun("delete", object, null, "x-1");
+      expect(text).toContain("permanent");
+      expect(text).not.toContain("is a soft delete in Twenty");
+    }
+    expect(renderWriteDryRun("delete", "companies", null, "c-1")).toContain("the company leaves the database");
   });
 });
 

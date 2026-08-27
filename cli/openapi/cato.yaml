@@ -17,7 +17,8 @@ info:
     and must be kept in step with the controllers by hand.
 
     WHAT IS IN HERE
-      * people, companies, opportunities, notes — list, get, create, update, delete;
+      * people, companies, opportunities, notes, tasks, taskTargets — list, get,
+        create, update, delete;
       * the full /marketing/* module: campaigns, company targets, contact research,
         contact selection candidates, members, review queue, assets and sending.
 
@@ -971,6 +972,468 @@ paths:
                     properties:
                       updateNote:
                         "$ref": "#/components/schemas/NoteForResponse"
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+  "/tasks":
+    get:
+      tags:
+        - tasks
+      summary: Find Many tasks
+      description: "**order_by**, **filter**, **limit**, **depth**, **starting_after** or **ending_before** can be provided to request your **tasks**"
+      operationId: findManyTasks
+      parameters:
+        - "$ref": "#/components/parameters/orderBy"
+        - "$ref": "#/components/parameters/filter"
+        - "$ref": "#/components/parameters/limit"
+        - "$ref": "#/components/parameters/depth"
+        - "$ref": "#/components/parameters/startingAfter"
+        - "$ref": "#/components/parameters/endingBefore"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      tasks:
+                        type: array
+                        items:
+                          "$ref": "#/components/schemas/TaskForResponse"
+                  pageInfo:
+                    type: object
+                    properties:
+                      hasNextPage:
+                        type: boolean
+                      startCursor:
+                        type: string
+                        format: uuid
+                      endCursor:
+                        type: string
+                        format: uuid
+                  totalCount:
+                    type: integer
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+    post:
+      tags:
+        - tasks
+      summary: Create One task
+      operationId: createOneTask
+      parameters:
+        - "$ref": "#/components/parameters/depth"
+        - "$ref": "#/components/parameters/upsert"
+      requestBody:
+        description: body
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/Task"
+      responses:
+        "201":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      createTask:
+                        "$ref": "#/components/schemas/TaskForResponse"
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+    delete:
+      tags:
+        - tasks
+      summary: Delete Many tasks
+      operationId: deleteManyTasks
+      parameters:
+        - "$ref": "#/components/parameters/filter"
+        - "$ref": "#/components/parameters/softDelete"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleteTasks:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+    patch:
+      tags:
+        - tasks
+      summary: Update Many tasks
+      operationId: updateManyTasks
+      parameters:
+        - "$ref": "#/components/parameters/depth"
+        - "$ref": "#/components/parameters/filter"
+      requestBody:
+        description: body
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TaskForUpdate"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      updateTasks:
+                        type: array
+                        items:
+                          "$ref": "#/components/schemas/TaskForResponse"
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+  "/tasks/{id}":
+    get:
+      tags:
+        - tasks
+      summary: Find One task
+      description: "**depth** can be provided to request your **task**"
+      operationId: findOneTask
+      parameters:
+        - "$ref": "#/components/parameters/idPath"
+        - "$ref": "#/components/parameters/depth"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      task:
+                        "$ref": "#/components/schemas/TaskForResponse"
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+    delete:
+      tags:
+        - tasks
+      summary: Delete One task
+      operationId: deleteOneTask
+      parameters:
+        - "$ref": "#/components/parameters/idPath"
+        - "$ref": "#/components/parameters/softDelete"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleteTask:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+    patch:
+      tags:
+        - tasks
+      summary: Update One task
+      operationId: UpdateOneTask
+      parameters:
+        - "$ref": "#/components/parameters/idPath"
+        - "$ref": "#/components/parameters/depth"
+      requestBody:
+        description: body
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TaskForUpdate"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      updateTask:
+                        "$ref": "#/components/schemas/TaskForResponse"
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+  "/taskTargets":
+    get:
+      tags:
+        - taskTargets
+      summary: Find Many taskTargets
+      description: "**order_by**, **filter**, **limit**, **depth**, **starting_after** or **ending_before** can be provided to request your **taskTargets**"
+      operationId: findManyTaskTargets
+      parameters:
+        - "$ref": "#/components/parameters/orderBy"
+        - "$ref": "#/components/parameters/filter"
+        - "$ref": "#/components/parameters/limit"
+        - "$ref": "#/components/parameters/depth"
+        - "$ref": "#/components/parameters/startingAfter"
+        - "$ref": "#/components/parameters/endingBefore"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      taskTargets:
+                        type: array
+                        items:
+                          "$ref": "#/components/schemas/TaskTargetForResponse"
+                  pageInfo:
+                    type: object
+                    properties:
+                      hasNextPage:
+                        type: boolean
+                      startCursor:
+                        type: string
+                        format: uuid
+                      endCursor:
+                        type: string
+                        format: uuid
+                  totalCount:
+                    type: integer
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+    post:
+      tags:
+        - taskTargets
+      summary: Create One taskTarget
+      operationId: createOneTaskTarget
+      parameters:
+        - "$ref": "#/components/parameters/depth"
+        - "$ref": "#/components/parameters/upsert"
+      requestBody:
+        description: body
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TaskTarget"
+      responses:
+        "201":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      createTaskTarget:
+                        "$ref": "#/components/schemas/TaskTargetForResponse"
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+    delete:
+      tags:
+        - taskTargets
+      summary: Delete Many taskTargets
+      operationId: deleteManyTaskTargets
+      parameters:
+        - "$ref": "#/components/parameters/filter"
+        - "$ref": "#/components/parameters/softDelete"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleteTaskTargets:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+    patch:
+      tags:
+        - taskTargets
+      summary: Update Many taskTargets
+      operationId: updateManyTaskTargets
+      parameters:
+        - "$ref": "#/components/parameters/depth"
+        - "$ref": "#/components/parameters/filter"
+      requestBody:
+        description: body
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TaskTargetForUpdate"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      updateTaskTargets:
+                        type: array
+                        items:
+                          "$ref": "#/components/schemas/TaskTargetForResponse"
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+  "/taskTargets/{id}":
+    get:
+      tags:
+        - taskTargets
+      summary: Find One taskTarget
+      description: "**depth** can be provided to request your **taskTarget**"
+      operationId: findOneTaskTarget
+      parameters:
+        - "$ref": "#/components/parameters/idPath"
+        - "$ref": "#/components/parameters/depth"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      taskTarget:
+                        "$ref": "#/components/schemas/TaskTargetForResponse"
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+    delete:
+      tags:
+        - taskTargets
+      summary: Delete One taskTarget
+      operationId: deleteOneTaskTarget
+      parameters:
+        - "$ref": "#/components/parameters/idPath"
+        - "$ref": "#/components/parameters/softDelete"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleteTaskTarget:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+        "400":
+          "$ref": "#/components/responses/400"
+        "401":
+          "$ref": "#/components/responses/401"
+    patch:
+      tags:
+        - taskTargets
+      summary: Update One taskTarget
+      operationId: UpdateOneTaskTarget
+      parameters:
+        - "$ref": "#/components/parameters/idPath"
+        - "$ref": "#/components/parameters/depth"
+      requestBody:
+        description: body
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TaskTargetForUpdate"
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      updateTaskTarget:
+                        "$ref": "#/components/schemas/TaskTargetForResponse"
         "400":
           "$ref": "#/components/responses/400"
         "401":
@@ -3144,21 +3607,21 @@ components:
         name: Company name
         domainName:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://muffled-hovercraft.net/"
+          primaryLinkUrl: "https://profuse-invite.org"
           secondaryLinks: []
         linkedinLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://tattered-bowling.biz/"
+          primaryLinkUrl: "https://regular-monster.net"
           secondaryLinks: []
         xLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://near-event.org"
+          primaryLinkUrl: "https://pleasant-costume.info"
           secondaryLinks: []
         product:
           - LEO
         visibility: MARKETING
         annualRecurringRevenue:
-          amountMicros: "380000000"
+          amountMicros: "294000000"
           currencyCode: EUR
         branche: ADVOCATUUR
         klantstatus: KLANT
@@ -3705,21 +4168,21 @@ components:
         name: Company name
         domainName:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://waterlogged-premeditation.info/"
+          primaryLinkUrl: "https://svelte-schedule.org"
           secondaryLinks: []
         linkedinLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://slight-pasta.com"
+          primaryLinkUrl: "https://frozen-advertisement.org/"
           secondaryLinks: []
         xLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://lined-pecan.com"
+          primaryLinkUrl: "https://nocturnal-simple.org/"
           secondaryLinks: []
         product:
           - LEO
         visibility: MARKETING
         annualRecurringRevenue:
-          amountMicros: "542000000"
+          amountMicros: "431000000"
           currencyCode: EUR
         branche: ADVOCATUUR
         klantstatus: KLANT
@@ -5291,18 +5754,18 @@ components:
           type: string
           enum:
             - NEW
-            - PILOT
             - SCREENING
             - MEETING
             - PROPOSAL
+            - PILOT
             - CUSTOMER
-            - VERLOREN
             - ON_HOLD
+            - VERLOREN
           description: Opportunity stage
       example:
         name: Opportunity name
         amount:
-          amountMicros: "574000000"
+          amountMicros: "972000000"
           currencyCode: EUR
         stage: NEW
     OpportunityForResponse:
@@ -5413,13 +5876,13 @@ components:
           type: string
           enum:
             - NEW
-            - PILOT
             - SCREENING
             - MEETING
             - PROPOSAL
+            - PILOT
             - CUSTOMER
-            - VERLOREN
             - ON_HOLD
+            - VERLOREN
           description: Opportunity stage
         attachments:
           type: array
@@ -5543,18 +6006,18 @@ components:
           type: string
           enum:
             - NEW
-            - PILOT
             - SCREENING
             - MEETING
             - PROPOSAL
+            - PILOT
             - CUSTOMER
-            - VERLOREN
             - ON_HOLD
+            - VERLOREN
           description: Opportunity stage
       example:
         name: Opportunity name
         amount:
-          amountMicros: "910000000"
+          amountMicros: "643000000"
           currencyCode: EUR
         stage: NEW
     Person:
@@ -5813,18 +6276,18 @@ components:
           description: "Contact's phone numbers"
       example:
         name:
-          firstName: Bria
-          lastName: Little
+          firstName: Coy
+          lastName: Nienow
         emails:
-          primaryEmail: "bulah_lockman72@yahoo.com"
+          primaryEmail: "silas_rowe2@yahoo.com"
           additionalEmails: null
         linkedinLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://untrue-seafood.com"
+          primaryLinkUrl: "https://ill-fated-awareness.info/"
           secondaryLinks: []
         xLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://personal-leading.net"
+          primaryLinkUrl: "https://nimble-valentine.com/"
           secondaryLinks: []
         visibility: MARKETING
         product:
@@ -6426,18 +6889,18 @@ components:
           description: "Contact's phone numbers"
       example:
         name:
-          firstName: Eve
-          lastName: McGlynn
+          firstName: Wade
+          lastName: Wolf
         emails:
-          primaryEmail: "ewell.kemmer94@yahoo.com"
+          primaryEmail: "drew4@hotmail.com"
           additionalEmails: null
         linkedinLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://impossible-priesthood.com"
+          primaryLinkUrl: "https://worldly-volleyball.net"
           secondaryLinks: []
         xLink:
           primaryLinkLabel: ""
-          primaryLinkUrl: "https://fussy-ferret.biz"
+          primaryLinkUrl: "https://short-grouper.net/"
           secondaryLinks: []
         visibility: MARKETING
         product:
@@ -6449,6 +6912,76 @@ components:
           primaryPhoneCallingCode: "+33"
           primaryPhoneCountryCode: FR
           additionalPhones: []
+    Task:
+      type: object
+      description: A task
+      properties:
+        position:
+          type: number
+          description: Task record position
+        title:
+          type: string
+          description: Task title
+        bodyV2:
+          type: object
+          properties:
+            blocknote:
+              type: string
+            markdown:
+              type: string
+          description: Task body
+        dueAt:
+          type: string
+          format: date-time
+          description: Task due date
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+          description: The workspace member who last updated the record
+        assigneeId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - TODO
+            - IN_PROGRESS
+            - ON_HOLD
+            - DONE
+          description: Task status
+      example:
+        favorites: null
+        status: TODO
+      required:
+        - favorites
     TaskForResponse:
       type: object
       description: A task
@@ -6538,10 +7071,6 @@ components:
             - TODO
             - IN_PROGRESS
             - ON_HOLD
-            - HIGH_POTENTIAL
-            - SUCCESS
-            - REJECTED
-            - HIGH_PRIORITY
             - DONE
           description: Task status
         attachments:
@@ -6574,6 +7103,126 @@ components:
           items:
             "$ref": "#/components/schemas/CompanyForResponse"
           description: Tasks tied to the Company
+    TaskForUpdate:
+      type: object
+      description: A task
+      properties:
+        position:
+          type: number
+          description: Task record position
+        title:
+          type: string
+          description: Task title
+        bodyV2:
+          type: object
+          properties:
+            blocknote:
+              type: string
+            markdown:
+              type: string
+          description: Task body
+        dueAt:
+          type: string
+          format: date-time
+          description: Task due date
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+          description: The workspace member who last updated the record
+        assigneeId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - TODO
+            - IN_PROGRESS
+            - ON_HOLD
+            - DONE
+          description: Task status
+      example:
+        favorites: null
+        status: TODO
+    TaskTarget:
+      type: object
+      description: A task target
+      properties:
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: TaskTarget record position
+        targetCompanyId:
+          type: string
+          format: uuid
+        targetOpportunityId:
+          type: string
+          format: uuid
+        targetPersonId:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+      example: {}
     TaskTargetForResponse:
       type: object
       description: A task target
@@ -6671,6 +7320,58 @@ components:
           oneOf:
             - "$ref": "#/components/schemas/TaskForResponse"
           description: TaskTarget task
+    TaskTargetForUpdate:
+      type: object
+      description: A task target
+      properties:
+        createdBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+          description: The creator of the record
+        updatedBy:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - EMAIL
+                - CALENDAR
+                - WORKFLOW
+                - AGENT
+                - API
+                - IMPORT
+                - MANUAL
+                - SYSTEM
+                - WEBHOOK
+          description: The workspace member who last updated the record
+        position:
+          type: number
+          description: TaskTarget record position
+        targetCompanyId:
+          type: string
+          format: uuid
+        targetOpportunityId:
+          type: string
+          format: uuid
+        targetPersonId:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+      example: {}
     TimelineActivityForResponse:
       type: object
       description: Aggregated / filtered event to be displayed on the timeline

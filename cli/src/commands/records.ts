@@ -1,8 +1,10 @@
-// Read commands for the four core objects: people, companies, opportunities, notes.
+// Read commands for the core objects: people, companies, opportunities, notes,
+// tasks. (`cato tasks` renders through commands/tasks.ts, but plans and pages
+// through here so filters, --limit and --all behave the same everywhere.)
 
 import { buildListQuery, iterRecords, type RestClient, type TwentyRecord } from "@twenty-crm/core";
 import {
-  buildCompanyFilter, buildNoteFilter, buildOpportunityFilter, buildPeopleFilter,
+  buildCompanyFilter, buildNoteFilter, buildOpportunityFilter, buildPeopleFilter, buildTaskFilter,
 } from "../filters.ts";
 import { flagBool, flagList, flagNumber, flagString, type FlagValue } from "../args.ts";
 import { render, renderOne } from "../output.ts";
@@ -17,6 +19,7 @@ export const DEFAULT_COLUMNS = {
   companies: ["id", "name", "domainName.primaryLinkUrl", "address.addressCity", "employees", "branche", "prudaiMarketingSourceSegment"],
   opportunities: ["id", "name", "stage", "closeDate", "amount.amountMicros", "companyId", "ownerId"],
   notes: ["id", "title", "createdAt", "assigneeId"],
+  tasks: ["id", "title", "status", "dueAt", "assigneeId"],
 } as const;
 
 export type ObjectPath = keyof typeof DEFAULT_COLUMNS;
@@ -106,6 +109,20 @@ export function planList(objectPath: ObjectPath, flags: Record<string, FlagValue
         title: flagString(flags, "title"),
         assigneeId: flagString(flags, "assignee-id"),
         createdSince: flagString(flags, "created-since"),
+        search,
+        raw,
+        includeDeleted,
+      });
+      break;
+    case "tasks":
+      // --company-id/--person-id/--opportunity-id go through taskTargets and
+      // are resolved to an id[in] clause by commands/tasks.ts, not here.
+      filter = buildTaskFilter({
+        status: flagString(flags, "status"),
+        assigneeId: flagString(flags, "assignee-id"),
+        dueBefore: flagString(flags, "due-before"),
+        dueAfter: flagString(flags, "due-after"),
+        overdue: flagBool(flags, "overdue") === true,
         search,
         raw,
         includeDeleted,
@@ -208,4 +225,5 @@ const SINGULAR: Record<ObjectPath, string> = {
   companies: "company",
   opportunities: "opportunity",
   notes: "note",
+  tasks: "task",
 };
