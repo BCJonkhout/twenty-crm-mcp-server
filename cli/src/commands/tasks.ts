@@ -80,7 +80,7 @@ export function parkDue(now: Date = new Date(), timeZone: string = DUE_TIME_ZONE
 
 // ---- status -----------------------------------------------------------------
 
-/** Non-null when a status is outside the four the board uses; the CRM decides. */
+/** Non-null when a status is outside the six the board uses; the CRM decides. */
 export function statusHint(status: string | undefined): string | null {
   if (!status?.trim()) return null;
   if (isKnownTaskStatus(status)) return null;

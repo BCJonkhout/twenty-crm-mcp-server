@@ -155,7 +155,8 @@ letterlijke grenswaarde.
 
 **Koppelen** gebeurt via `taskTargets`, net als bij notes. Mislukt het koppelen, dan wordt de taak
 weer verwijderd — een taak die aan niets hangt is een kaart die niemand terugvindt. Een taak
-zónder target mag wel: het bord bevat ook losse to-do's.
+zónder target kan alleen met een expliciete `--no-target` (intern werk): elke taak die een klant
+raakt hangt aan die klant, want de tijdlijnregel op de klantpagina ontstaat op het koppelmoment.
 
 **Eigenaar:** `--assignee` zoekt een workspace member op voornaam, achternaam, volledige naam of
 e-mail en weigert een dubbelzinnige treffer met de kandidaten erbij. `--assignee-id <uuid>` slaat

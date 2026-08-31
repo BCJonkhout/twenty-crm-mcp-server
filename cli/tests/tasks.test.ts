@@ -192,11 +192,11 @@ describe("planList for tasks", () => {
       expect(COMMAND_TREE.tasks).toContain(verb);
     }
     const parsed = parseArgs(
-      ["tasks", "create", "--title", "x", "--field", "tags=a,b", "--field", "bord=Prudai"],
+      ["tasks", "create", "--title", "x", "--field", "tags=a,b", "--field", "vak=Prudai"],
       COMMAND_TREE, flagSpecsFor,
     );
     expect(parsed.errors).toEqual([]);
-    expect(parsed.flags.field).toEqual(["tags=a,b", "bord=Prudai"]);
+    expect(parsed.flags.field).toEqual(["tags=a,b", "vak=Prudai"]);
     const complete = parseArgs(["tasks", "complete", "t-1", "--no-dry-run", "--yes"], COMMAND_TREE, flagSpecsFor);
     expect(complete.command).toEqual(["tasks", "complete"]);
     expect(complete.positionals).toEqual(["t-1"]);
@@ -287,8 +287,14 @@ describe("parseDueAt", () => {
 
 describe("parseFieldAssignments", () => {
   it("writes key=value as a string and key:=json as JSON", () => {
-    expect(parseFieldAssignments(["bord=Prudai", "prio:=3", "tags:=[\"a\",\"b\"]", "flag:=true", "x:=null"]))
-      .toEqual({ bord: "Prudai", prio: 3, tags: ["a", "b"], flag: true, x: null });
+    expect(parseFieldAssignments(["vak=Prudai", "prio:=3", "tags:=[\"a\",\"b\"]", "flag:=true", "x:=null"]))
+      .toEqual({ vak: "Prudai", prio: 3, tags: ["a", "b"], flag: true, x: null });
+  });
+
+  // `bord` was the board field's working name before it landed as `board`; the
+  // muscle memory gets the own-flag error, not a CATO 400 on a ghost field.
+  it("refuses the legacy spelling bord", () => {
+    expect(() => parseFieldAssignments(["bord=Prudai"])).toThrow(/own flag/);
   });
 
   it("keeps a comma and an = inside the value", () => {

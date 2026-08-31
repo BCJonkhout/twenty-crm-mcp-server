@@ -175,6 +175,10 @@ export function buildNoteUpdateBody(flags: NoteFlags): Record<string, unknown> {
 export const TASK_FLAG_OWNED_FIELDS = new Set([
   "title", "status", "dueAt", "assigneeId", "bodyV2", "body",
   "board", "labels", "priority", "source", "betrokkenen", "legacyRef", "sourceLink",
+  // `bord` was the working name for the board field before it landed as `board`
+  // (old README examples used it); the live field does not exist under that
+  // name, so catch the muscle memory here instead of relaying CATO's 400.
+  "bord",
   "id", "createdAt", "updatedAt", "deletedAt", "createdBy", "updatedBy",
 ]);
 
