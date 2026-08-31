@@ -87,35 +87,58 @@ die skills draaien op het moment van schrijven nog op Trello, dus dit is de kant
 niet een koppeling die al loopt.
 
 ```sh
-cato tasks list --status TODO --assignee beau
+cato tasks list --status TODO --assignee beau --board PRUDAI
 cato tasks list --overdue                       # deadline verstreken en niet DONE
 cato tasks list --due-after 2026-09-01 --due-before 2026-09-07
 cato tasks list --company-id <uuid>             # alles wat aan dit bedrijf hangt
+cato tasks list --label BUG --priority HIGH --source AGENT
 cato tasks search "offerte"
 cato tasks get <id>                             # alle velden, body als markdown, targets
+cato tasks comments <id>                        # de opmerkingen, oudste eerst
 
-cato tasks create --title "Bel terug" --company-id <uuid> --due 2026-09-04 \
+cato tasks create --title "Bel terug" --board PRUDAI --company-id <uuid> --due 2026-09-04 \
      --body-file notitie.md --assignee geert --no-dry-run --yes
 cato tasks update <id> --status "in progress" --due "2026-09-04T10:00" --no-dry-run --yes
-cato tasks complete <id> --no-dry-run --yes     # kort voor --status DONE
+cato tasks claim <id> --assignee codex --no-dry-run --yes    # IN_PROGRESS + eigenaar
+cato tasks park <id> --no-dry-run --yes                      # ON_HOLD, due +14 dagen
+cato tasks comment <id> --body "🤖 opgepakt in sessie X" --no-dry-run --yes
+cato tasks complete <id> --no-dry-run --yes     # kort voor --status DONE (`done` mag ook)
 cato tasks delete <id> --no-dry-run --yes
 ```
 
 | Verb | Wat het doet |
 |---|---|
-| `tasks list` | Takenlijst met status, deadline, eigenaar, gekoppelde records en URL. Filters: `--status`, `--assignee`/`--assignee-id`, `--due-before`/`--due-after`, `--overdue`, `--company-id`/`--person-id`/`--opportunity-id`, plus `--all` en `--limit`. |
-| `tasks get <id>` | Eén taak: alle velden, de body als markdown, de targets met naam én id. |
+| `tasks list` | Takenlijst met status, deadline, eigenaar, gekoppelde records en URL. Filters: `--status`, `--board`, `--label`, `--priority`, `--source`, `--assignee`/`--assignee-id`, `--due-before`/`--due-after`, `--overdue`, `--company-id`/`--person-id`/`--opportunity-id`, plus `--all` en `--limit`. |
+| `tasks get <id>` | Eén taak: alle velden (ook bord, labels, prioriteit, bron, betrokkenen, laatste opmerking), de body als markdown, de targets met naam én id. |
 | `tasks search <term>` | Zoekt hoofdletterongevoelig in de titel, met dezelfde filters als `list`. |
-| `tasks create` | Nieuwe taak, optioneel gekoppeld aan bedrijf/persoon/opportunity. |
-| `tasks update <id>` | Titel, status, deadline, eigenaar, body of een custom veld. Koppelingen blijven staan. |
-| `tasks complete <id>` | Zet de status op `DONE`. |
+| `tasks create` | Nieuwe taak. `--board` is verplicht; `--due` ook, tenzij expliciet `--no-due`; een target (`--company-id`/`--person-id`/`--opportunity-id`) ook, tenzij expliciet `--no-target`. Zonder `--status` landt een taak met `--source AGENT`/`MEMO`/`CHAT` in `INBOX` (agents maken aan, Beau/Geert triëren), anders in `TODO`. |
+| `tasks update <id>` | Titel, status, deadline, eigenaar, body, bord, labels, prioriteit, bron, betrokkenen, bronlink, legacy-ref of een custom veld. Koppelingen blijven staan. |
+| `tasks claim <id>` | Pakt de taak op: status `IN_PROGRESS` + de `--assignee` die je noemt (verplicht). |
+| `tasks park <id>` | Parkeert: status `ON_HOLD`, due op wanneer hij terugkomt (default +14 dagen — de bordregel). |
+| `tasks comment <id>` | Zet een opmerking op de taak (`--body`/`--body-file`) én stempelt `lastCommentAt`/`lastCommentPreview` (eerste ~120 tekens) op de kaart. |
+| `tasks comments <id>` | Leest de opmerkingen, chronologisch. |
+| `tasks complete <id>` | Zet de status op `DONE`. Alias: `tasks done`. |
 | `tasks delete <id>` | Verwijdert de taak. |
 
-**Status:** `TODO`, `IN_PROGRESS`, `ON_HOLD`, `DONE` — hoofdletterongevoelig, en `in progress`
-mag ook. Anders dan de stage-enum van opportunities weigert de CLI een onbekende status níet zelf:
-hij normaliseert, waarschuwt op stderr, en laat CATO's veld-metadata beslissen. Een status die
-morgen in de UI wordt toegevoegd werkt dus meteen, en een typefout levert nog steeds een
-duidelijke 400 van de server op.
+**Status:** `INBOX`, `TODO`, `IN_PROGRESS`, `IN_REVIEW`, `ON_HOLD`, `DONE` — hoofdletterongevoelig,
+en `in progress` mag ook. Anders dan de stage-enum van opportunities weigert de CLI een onbekende
+status níet zelf: hij normaliseert, waarschuwt op stderr, en laat CATO's veld-metadata beslissen.
+Een status die morgen in de UI wordt toegevoegd werkt dus meteen, en een typefout levert nog
+steeds een duidelijke 400 van de server op.
+
+**Bordvelden** (gemeten aan de live metadata, 31-08-2026): `--board` (`PRUDAI`/`PRODUCT`),
+`--label` (`DISCUSS_TOGETHER`/`BUG`/`IMPROVEMENT`/`FEATURE_REQUEST`/`RESEARCH`, herhaalbaar of
+komma-gescheiden; een write vervangt de hele set), `--priority` (`HIGH`/`MEDIUM`/`LOW`),
+`--source` (`MEMO`/`CHAT`/`AGENT`/`MANUAL`), `--betrokkenen`
+(`BEAU`/`GEERT`/`BAS`/`ROLAND`/`CODEX`), `--source-link` (absolute URL naar het bronverslag) en
+`--legacy-ref` (Trello-herkomst, alleen voor de migratie). Déze waarden worden wél door de CLI
+afgedwongen: het zijn stabiele bordconfiguratie, en een typefout die stil niets matcht zou het
+bord verkeerd rapporteren.
+
+**Opmerkingen** zijn `comment`-records (object "Opmerking") die via een relatie aan de taak
+hangen; auteur en tijd komen gratis uit `createdBy`/`createdAt`. `tasks comment` schrijft er één
+en werkt daarna de kaartvelden bij; mislukt dat tweede deel, dan blijft de opmerking staan en
+faalt het commando luid — de opmerking is de inhoud, de preview is afgeleid.
 
 **Deadlines** worden gelezen en getoond in Europe/Amsterdam, niet in de tijdzone van de host.
 `--due 2026-09-04` is middernacht hier (de UI toont de 4e, en de taak is verlopen vanaf het begin
@@ -138,10 +161,12 @@ zónder target mag wel: het bord bevat ook losse to-do's.
 e-mail en weigert een dubbelzinnige treffer met de kandidaten erbij. `--assignee-id <uuid>` slaat
 die zoektocht over. `--assignee me` bestaat niet: een API-sleutel ís geen workspace member.
 
-**`--field key=value`** is het doorgeefluik voor custom velden die nog geen eigen vlag hebben
-(`bord`, `labels`); `--field key:=<json>` schrijft een getal, boolean of lijst. Velden die wél een
-vlag hebben worden geweigerd, zodat niemand de datum- en status-normalisatie omzeilt. Bestaat het
-veld niet in CATO, dan zie je de 400 van de server.
+**`--field key=value`** is het doorgeefluik voor custom velden die nog geen eigen vlag hebben;
+`--field key:=<json>` schrijft een getal, boolean of lijst. Velden die wél een vlag hebben
+(status, due, board, labels, …) worden geweigerd, zodat niemand de normalisatie en validatie
+omzeilt. `lastCommentAt`/`lastCommentPreview` blijven bewust open — de Trello-migratie vult ze
+met terugwerkende kracht via `--field`. Bestaat het veld niet in CATO, dan zie je de 400 van de
+server.
 
 > **`tasks delete` is definitief** — net als elke andere `delete` in deze CLI; zie het kader
 > onder "Schrijven in het CRM".

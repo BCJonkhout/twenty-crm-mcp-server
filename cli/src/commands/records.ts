@@ -119,6 +119,10 @@ export function planList(objectPath: ObjectPath, flags: Record<string, FlagValue
       // are resolved to an id[in] clause by commands/tasks.ts, not here.
       filter = buildTaskFilter({
         status: flagString(flags, "status"),
+        board: flagString(flags, "board"),
+        labels: flagList(flags, "label"),
+        priority: flagString(flags, "priority"),
+        source: flagString(flags, "source"),
         assigneeId: flagString(flags, "assignee-id"),
         dueBefore: flagString(flags, "due-before"),
         dueAfter: flagString(flags, "due-after"),
