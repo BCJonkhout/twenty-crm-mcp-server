@@ -1,7 +1,7 @@
 import { COMMAND_SUMMARIES, COMMAND_TREE, flagSpecsFor } from "./commands.ts";
 import { GLOBAL_FLAGS, type FlagSpecs } from "./args.ts";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
 
 function renderFlags(specs: FlagSpecs): string[] {
   const entries = Object.entries(specs);
@@ -37,8 +37,10 @@ export function topLevelHelp(): string {
     "  cato people list --branche ADVOCATUUR --contactable --limit 50 --csv",
     "  cato companies list --city Enschede --json",
     "  cato segments build --name twente-advocaten --branche ADVOCATUUR --city Enschede --wave-size 100 --csv",
-    "  cato tasks list --overdue --assignee beau",
-    "  cato tasks create --title \"Bel terug\" --company-id <uuid> --due 2026-09-04 --no-dry-run --yes",
+    "  cato tasks list --overdue --assignee beau --board PRUDAI",
+    "  cato tasks create --title \"Bel terug\" --board PRUDAI --company-id <uuid> --due 2026-09-04 --no-dry-run --yes",
+    "  cato tasks claim <id> --assignee codex --no-dry-run --yes",
+    "  cato tasks comment <id> --body \"🤖 opgepakt in sessie X\" --no-dry-run --yes",
     "  cato import --csv leads.csv               # dry run, always",
     "  cato marketing touchpoints --campaign <id> --state pending",
     "",

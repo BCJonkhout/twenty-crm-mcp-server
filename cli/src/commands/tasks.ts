@@ -18,7 +18,7 @@
 import { andExpr, clause, iterRecords, type RestClient, type TwentyRecord } from "@twenty-crm/core";
 import { isKnownTaskStatus, normaliseTaskStatus, TASK_STATUS_VALUES } from "../filters.ts";
 import { render, renderOne, toCsv } from "../output.ts";
-import { DUE_TIME_ZONE, parseZonedInstant, WALL_CLOCK_RE, zonedToUtc } from "../time.ts";
+import { DUE_TIME_ZONE, parseZonedInstant, WALL_CLOCK_RE, zonedDayStartIso, zonedToUtc } from "../time.ts";
 import { DEFAULT_BASE_URL, recordUrl } from "../urls.ts";
 import { fetchRecords, type ListInvocation } from "./records.ts";
 
@@ -63,9 +63,24 @@ export function formatDue(iso: string | null | undefined, timeZone: string = DUE
   return p.hour === "00" && p.minute === "00" ? day : `${day} ${p.hour}:${p.minute}`;
 }
 
+/**
+ * Board rule: parking a card sets when it comes back. Default two weeks from
+ * `now`: the calendar day 14 days out, at midnight Europe/Amsterdam — the same
+ * instant `--due <that day>` would write.
+ */
+export function parkDue(now: Date = new Date(), timeZone: string = DUE_TIME_ZONE): string {
+  const dtf = new Intl.DateTimeFormat("en-CA", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  });
+  const today = dtf.format(now); // YYYY-MM-DD in the team's zone
+  const iso = zonedDayStartIso(today, 14, timeZone);
+  if (!iso) throw new TaskError(`Cannot compute a park due date from '${today}'.`);
+  return iso;
+}
+
 // ---- status -----------------------------------------------------------------
 
-/** Non-null when a status is outside the four the board uses; the CRM decides. */
+/** Non-null when a status is outside the six the board uses; the CRM decides. */
 export function statusHint(status: string | undefined): string | null {
   if (!status?.trim()) return null;
   if (isKnownTaskStatus(status)) return null;
@@ -261,6 +276,52 @@ export async function fetchTask(client: RestClient, id: string): Promise<TwentyR
   return result?.data?.task ?? null;
 }
 
+// ---- comments ---------------------------------------------------------------
+
+export interface TaskComment extends Record<string, unknown> {
+  id: string;
+  body: string;
+  createdAt: string;
+  /** "name (source)" from the ACTOR field, or "" when the CRM sent none. */
+  author: string;
+}
+
+/** Every comment on the task, oldest first — a thread reads top to bottom. */
+export async function fetchComments(client: RestClient, taskId: string): Promise<TaskComment[]> {
+  const filter = andExpr(clause("taskId", "eq", taskId), "deletedAt[is]:NULL");
+  const rows: TaskComment[] = [];
+  for await (const row of iterRecords(client, "comments", {
+    filter, limit: 200, order_by: "createdAt[AscNullsFirst]",
+  })) {
+    const by = row.createdBy as { name?: string; source?: string } | null | undefined;
+    rows.push({
+      id: String(row.id ?? ""),
+      body: String(row.body ?? ""),
+      createdAt: String(row.createdAt ?? ""),
+      author: by?.name ? `${by.name}${by.source ? ` (${by.source})` : ""}` : "",
+    });
+  }
+  return rows;
+}
+
+export function renderCommentList(
+  comments: readonly TaskComment[],
+  taskUrl: string,
+  ctx: { json: boolean; csv: boolean },
+): string {
+  if (ctx.json) return JSON.stringify(comments, null, 2);
+  if (ctx.csv) return toCsv(comments, ["id", "createdAt", "author", "body"]);
+  if (comments.length === 0) return `(no comments)\n\n${taskUrl}`;
+  const lines: string[] = [];
+  for (const c of comments) {
+    lines.push(`${formatDue(c.createdAt)}  ${c.author || "?"}`);
+    for (const l of c.body.split("\n")) lines.push(`  ${l}`);
+    lines.push("");
+  }
+  lines.push(`${comments.length} comment(s)  ${taskUrl}`);
+  return lines.join("\n");
+}
+
 // ---- rendering --------------------------------------------------------------
 
 export interface TaskRow extends Record<string, unknown> {
@@ -326,7 +387,11 @@ export function renderTaskList(
   return render(listRows, { columns, maxWidths: { title: 60, targets: 60 } });
 }
 
-const DETAIL_SCALARS = ["id", "title", "status", "due", "dueAt", "assignee", "assigneeId", "position", "createdAt", "updatedAt", "url"] as const;
+const DETAIL_SCALARS = [
+  "id", "title", "status", "board", "priority", "source", "labels", "betrokkenen",
+  "due", "dueAt", "assignee", "assigneeId", "sourceLink", "legacyRef", "lastComment",
+  "position", "createdAt", "updatedAt", "url",
+] as const;
 
 export function renderTaskDetail(
   row: TaskRow | null,
@@ -339,6 +404,17 @@ export function renderTaskDetail(
   const createdBy = row.createdBy as { name?: string; source?: string } | null | undefined;
   const scalars: Record<string, unknown> = {};
   for (const key of DETAIL_SCALARS) scalars[key] = row[key];
+  // The board fields that are not flat strings, made readable: MULTI_SELECT as
+  // a comma list, the LINKS composite as its URL, the last comment as
+  // "preview (when)" so Trello's comment badge has an equivalent here.
+  scalars.labels = Array.isArray(row.labels) ? (row.labels as string[]).join(", ") : row.labels ?? "";
+  scalars.betrokkenen = Array.isArray(row.betrokkenen) ? (row.betrokkenen as string[]).join(", ") : row.betrokkenen ?? "";
+  const link = row.sourceLink as { primaryLinkUrl?: string } | null | undefined;
+  scalars.sourceLink = link?.primaryLinkUrl ?? "";
+  const lastPreview = row.lastCommentPreview ? String(row.lastCommentPreview) : "";
+  scalars.lastComment = lastPreview
+    ? `${lastPreview}${row.lastCommentAt ? `  (${formatDue(String(row.lastCommentAt))})` : ""}`
+    : "";
   scalars.createdBy = createdBy?.name ? `${createdBy.name} (${createdBy.source ?? "?"})` : "";
   // renderOne pads each label to the longest one and adds two spaces, so the
   // second and later target lines have to line up with that same column.

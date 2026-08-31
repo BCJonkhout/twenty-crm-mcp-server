@@ -3,7 +3,9 @@
 
 import type { FlagSpecs } from "./args.ts";
 import {
-  BRANCHE_VALUES, OPPORTUNITY_STAGE_VALUES, PRODUCT_VALUES, SALES_STATUS_VALUES, TASK_STATUS_VALUES,
+  BRANCHE_VALUES, OPPORTUNITY_STAGE_VALUES, PRODUCT_VALUES, SALES_STATUS_VALUES,
+  TASK_BETROKKENEN_VALUES, TASK_BOARD_VALUES, TASK_LABEL_VALUES, TASK_PRIORITY_VALUES,
+  TASK_SOURCE_VALUES, TASK_STATUS_VALUES,
 } from "./filters.ts";
 
 export const COMMAND_TREE: Record<string, readonly string[]> = {
@@ -11,7 +13,7 @@ export const COMMAND_TREE: Record<string, readonly string[]> = {
   companies: ["list", "get", "search", "create", "update", "delete"],
   opportunities: ["list", "create", "update"],
   notes: ["list", "create", "update"],
-  tasks: ["list", "get", "search", "create", "update", "complete", "delete"],
+  tasks: ["list", "get", "search", "create", "update", "complete", "done", "claim", "park", "comment", "comments", "delete"],
   segments: ["build"],
   import: [],
   auth: ["create", "set", "list", "revoke", "status", "whoami", "roles"],
@@ -90,6 +92,10 @@ const TASK_STATUS_HELP = `One of: ${TASK_STATUS_VALUES.join(", ")} (case-insensi
 
 const TASK_FILTER_FLAGS: FlagSpecs = {
   status: { type: "string", placeholder: "<value>", description: TASK_STATUS_HELP },
+  board: { type: "string", placeholder: "<value>", description: `Only tasks on this board. One of: ${TASK_BOARD_VALUES.join(", ")}.` },
+  label: { type: "string[]", placeholder: "<a,b>", description: `MULTI_SELECT label (containsAny). One of: ${TASK_LABEL_VALUES.join(", ")}.` },
+  priority: { type: "string", placeholder: "<value>", description: `One of: ${TASK_PRIORITY_VALUES.join(", ")}.` },
+  source: { type: "string", placeholder: "<value>", description: `Where the task came from. One of: ${TASK_SOURCE_VALUES.join(", ")}.` },
   "assignee-id": { type: "string", placeholder: "<uuid>", description: "Only tasks assigned to this workspace member." },
   assignee: { type: "string", placeholder: "<name|email>", description: "Same, by first name, last name or e-mail (looked up in the workspace)." },
   "due-before": { type: "string", placeholder: "<date>", description: "Due on or before this day (YYYY-MM-DD, the whole day counts) or at/before this timestamp. Read in Europe/Amsterdam." },
@@ -108,6 +114,13 @@ const TASK_UPDATE_FLAGS: FlagSpecs = {
   due: { type: "string", placeholder: "<YYYY-MM-DD[THH:MM]>", description: "Due date; day or wall-clock time in Europe/Amsterdam, or an ISO timestamp with zone." },
   "assignee-id": { type: "string", placeholder: "<uuid>", description: "Workspace member the task is assigned to." },
   assignee: { type: "string", placeholder: "<name|email>", description: "Same, by first name, last name or e-mail." },
+  board: { type: "string", placeholder: "<value>", description: `Board the card lives on. One of: ${TASK_BOARD_VALUES.join(", ")}. Required on create.` },
+  label: { type: "string[]", placeholder: "<a,b>", description: `Labels — a write replaces the whole set. One of: ${TASK_LABEL_VALUES.join(", ")}.` },
+  priority: { type: "string", placeholder: "<value>", description: `One of: ${TASK_PRIORITY_VALUES.join(", ")}.` },
+  source: { type: "string", placeholder: "<value>", description: `Where the task came from. One of: ${TASK_SOURCE_VALUES.join(", ")}. On create, AGENT/MEMO/CHAT default the status to INBOX.` },
+  betrokkenen: { type: "string[]", placeholder: "<a,b>", description: `Who else is on the card — a write replaces the whole set. One of: ${TASK_BETROKKENEN_VALUES.join(", ")}.` },
+  "source-link": { type: "string", placeholder: "<url>", description: "Link to the source report (e.g. the memo-verslag on SharePoint)." },
+  "legacy-ref": { type: "string", placeholder: "<text>", description: "Trello provenance (e.g. 'prudai#128 · <card-id>'). Migration only." },
   field: {
     type: "string[]", noSplit: true, placeholder: "<key=value>",
     description: "Extra field to write, repeatable. key=value writes a string; key:=<json> writes JSON (number, boolean, null, list).",
@@ -119,6 +132,22 @@ const TASK_WRITE_FLAGS: FlagSpecs = {
   "company-id": { type: "string", placeholder: "<uuid>", description: "Link the task to this company." },
   "person-id": { type: "string", placeholder: "<uuid>", description: "Link the task to this person." },
   "opportunity-id": { type: "string", placeholder: "<uuid>", description: "Link the task to this opportunity." },
+  "no-due": { type: "boolean", description: "Create the task without a due date. The board rule wants one on every card, so say so explicitly." },
+  "no-target": { type: "boolean", description: "Create the task without a company/person/opportunity link. For internal work only, so say so explicitly." },
+};
+
+const TASK_CLAIM_FLAGS: FlagSpecs = {
+  assignee: { type: "string", placeholder: "<name|email>", description: "Who takes the task on (first name, last name or e-mail). Required." },
+  "assignee-id": { type: "string", placeholder: "<uuid>", description: "Same, as a workspace-member id." },
+};
+
+const TASK_PARK_FLAGS: FlagSpecs = {
+  due: { type: "string", placeholder: "<YYYY-MM-DD>", description: "When the card comes back. Default: 14 days from today (the board rule for parking)." },
+};
+
+const TASK_COMMENT_FLAGS: FlagSpecs = {
+  body: { type: "string", placeholder: "<text>", description: "Comment text. Use --body-file for anything longer than a line." },
+  "body-file": { type: "string", placeholder: "<path>", description: "Read the comment text from a file." },
 };
 
 const SEARCH_FLAGS: FlagSpecs = {
@@ -240,7 +269,10 @@ export function flagSpecsFor(command: readonly string[]): FlagSpecs {
     case "tasks":
       if (sub === "create") return TASK_WRITE_FLAGS;
       if (sub === "update") return TASK_UPDATE_FLAGS;
-      if (sub === "get" || sub === "complete" || sub === "delete") return {};
+      if (sub === "claim") return TASK_CLAIM_FLAGS;
+      if (sub === "park") return TASK_PARK_FLAGS;
+      if (sub === "comment") return TASK_COMMENT_FLAGS;
+      if (sub === "get" || sub === "complete" || sub === "done" || sub === "delete" || sub === "comments") return {};
       return { ...COMMON_READ_FLAGS, ...TASK_FILTER_FLAGS, ...(sub === "search" ? SEARCH_FLAGS : {}) };
     case "segments":
       return SEGMENT_FLAGS;
@@ -271,9 +303,14 @@ export const COMMAND_SUMMARIES: Record<string, string> = {
   "tasks list": "List tasks: status, due date, assignee and the company/person/opportunity they hang off.",
   "tasks get": "Fetch one task by id, with its body (markdown), targets and assignee.",
   "tasks search": "Search tasks by title (case-insensitive substring), with the same filters as list.",
-  "tasks create": "Create a task, optionally linked to a company/person/opportunity. Needs --no-dry-run --yes.",
-  "tasks update": "Update a task by id — title, status, due date, assignee, body, custom fields. Links stay untouched. Needs --no-dry-run --yes.",
+  "tasks create": "Create a task. --board is required; --due too unless --no-due; a target (--company-id/--person-id/--opportunity-id) too unless --no-target. --source AGENT/MEMO/CHAT lands in status INBOX. Needs --no-dry-run --yes.",
+  "tasks update": "Update a task by id — title, status, due date, assignee, body, board, labels, custom fields. Links stay untouched. Needs --no-dry-run --yes.",
   "tasks complete": "Mark a task DONE (shorthand for update --status DONE). Needs --no-dry-run --yes.",
+  "tasks done": "Alias of `tasks complete`.",
+  "tasks claim": "Take a task on: status IN_PROGRESS + the --assignee you name. Needs --no-dry-run --yes.",
+  "tasks park": "Park a task: status ON_HOLD, due set to when it comes back (default +14 days). Needs --no-dry-run --yes.",
+  "tasks comment": "Add a comment to a task; also stamps lastCommentAt/lastCommentPreview on the card. Needs --no-dry-run --yes.",
+  "tasks comments": "Read a task's comments, oldest first.",
   "tasks delete": "Delete a task by id. Permanent — unlike the UI's trash, the row does not come back. Needs --no-dry-run --yes.",
   "segments build": "Build a target-audience selection from filters and write it out as JSON/CSV.",
   import: "Analyse a CSV; with --source-system also tag/create companies. Needs --no-dry-run --yes.",

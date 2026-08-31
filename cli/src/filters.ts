@@ -26,18 +26,43 @@ export const VISIBILITY_VALUES = ["MARKETING", "RESTRICTED"] as const;
 export const OPPORTUNITY_STAGE_VALUES = ["NEW", "SCREENING", "MEETING", "PROPOSAL", "PILOT", "ON_HOLD", "CUSTOMER", "VERLOREN"] as const;
 
 /**
- * SELECT `status` on task — the four the task board uses (metadata field
- * 3f4bf3f2-1236-4c77-a1f5-241ba4eb64df; four legacy options are being removed
- * on 2026-08-24). Unlike the stage enum this list is NOT enforced: the value is
+ * SELECT `status` on task — the six the board uses since the Trello→CATO field
+ * work landed (metadata field 3f4bf3f2-1236-4c77-a1f5-241ba4eb64df, measured
+ * live 2026-08-31): INBOX is the agents' triage queue, IN_REVIEW belongs to the
+ * PRODUCT board. Unlike the stage enum this list is NOT enforced: the value is
  * normalised and passed through, and CATO's field metadata decides. An unknown
  * value comes back as HTTP 400 with the enum message, so a status added in the
  * UI never waits for a CLI release — and a typo is still refused, by the CRM.
  */
-export const TASK_STATUS_VALUES = ["TODO", "IN_PROGRESS", "ON_HOLD", "DONE"] as const;
+export const TASK_STATUS_VALUES = ["INBOX", "TODO", "IN_PROGRESS", "IN_REVIEW", "ON_HOLD", "DONE"] as const;
 
-/** `in progress`, `in-progress`, `In_Progress` → `IN_PROGRESS`. */
-export function normaliseTaskStatus(value: string): string {
+// The task fields from the Trello→CATO migration (02-taakmodel §1.1), measured
+// against the live metadata on 2026-08-31. These four ARE enforced (like the
+// opportunity stage): they are filter/write values on stable config, and a typo
+// that silently matched nothing would misreport the board.
+
+/** SELECT `board` on task — which board the card lives on. */
+export const TASK_BOARD_VALUES = ["PRUDAI", "PRODUCT"] as const;
+
+/** MULTI_SELECT `labels` on task. */
+export const TASK_LABEL_VALUES = ["DISCUSS_TOGETHER", "BUG", "IMPROVEMENT", "FEATURE_REQUEST", "RESEARCH"] as const;
+
+/** SELECT `source` on task — where the card came from. AGENT/MEMO/CHAT land in INBOX. */
+export const TASK_SOURCE_VALUES = ["MEMO", "CHAT", "AGENT", "MANUAL"] as const;
+
+/** SELECT `priority` on task. */
+export const TASK_PRIORITY_VALUES = ["HIGH", "MEDIUM", "LOW"] as const;
+
+/** MULTI_SELECT `betrokkenen` on task — who else is on the card besides the assignee. */
+export const TASK_BETROKKENEN_VALUES = ["BEAU", "GEERT", "BAS", "ROLAND", "CODEX"] as const;
+
+/** `in progress`, `in-progress`, `In_Progress` → `IN_PROGRESS`; same for any SELECT value. */
+export function normaliseSelectValue(value: string): string {
   return value.trim().toUpperCase().replace(/[\s-]+/g, "_");
+}
+
+export function normaliseTaskStatus(value: string): string {
+  return normaliseSelectValue(value);
 }
 
 export function isKnownTaskStatus(value: string): boolean {
@@ -66,6 +91,15 @@ function requireEnum(flag: string, value: string, allowed: readonly string[]): s
 
 function requireEnumList(flag: string, values: readonly string[], allowed: readonly string[]): string[] {
   return values.map((v) => requireEnum(flag, v, allowed));
+}
+
+/** Like requireEnum, but forgiving about separators: `feature request` → FEATURE_REQUEST. */
+function requireSelect(flag: string, value: string, allowed: readonly string[]): string {
+  const v = normaliseSelectValue(value);
+  if (!allowed.includes(v)) {
+    throw new FilterError(`--${flag}: '${value}' is not a valid value. Allowed: ${allowed.join(", ")}.`);
+  }
+  return v;
 }
 
 // ---- people ---------------------------------------------------------------
@@ -252,6 +286,10 @@ export function buildNoteFilter(input: NoteFilterInput): string | null {
 
 export interface TaskFilterInput {
   status?: string;
+  board?: string;
+  labels?: string[];
+  priority?: string;
+  source?: string;
   assigneeId?: string;
   /** Inclusive: a bare day means "due on or before that day". */
   dueBefore?: string;
@@ -275,6 +313,13 @@ export function buildTaskFilter(input: TaskFilterInput): string | null {
       throw new FilterError("--overdue only covers open tasks; drop --status DONE.");
     }
     parts.push(clause("status", "eq", status));
+  }
+  if (input.board) parts.push(clause("board", "eq", requireSelect("board", input.board, TASK_BOARD_VALUES)));
+  if (input.priority) parts.push(clause("priority", "eq", requireSelect("priority", input.priority, TASK_PRIORITY_VALUES)));
+  if (input.source) parts.push(clause("source", "eq", requireSelect("source", input.source, TASK_SOURCE_VALUES)));
+  if (input.labels && input.labels.length > 0) {
+    const values = input.labels.map((l) => requireSelect("label", l, TASK_LABEL_VALUES));
+    parts.push(`labels[containsAny]:[${values.join(",")}]`);
   }
   if (input.assigneeId) parts.push(clause("assigneeId", "eq", input.assigneeId));
   // Both bounds are read exactly as --due writes a value, Europe/Amsterdam and

@@ -1,15 +1,19 @@
 import { describe, expect, it } from "bun:test";
-import { buildTaskFilter, FilterError, isKnownTaskStatus, normaliseTaskStatus } from "../src/filters.ts";
+import {
+  buildTaskFilter, FilterError, isKnownTaskStatus, normaliseTaskStatus, TASK_STATUS_VALUES,
+} from "../src/filters.ts";
 import { planList } from "../src/commands/records.ts";
 import { parseArgs, resolveWriteGate } from "../src/args.ts";
 import { COMMAND_TREE, flagSpecsFor } from "../src/commands.ts";
 import {
-  buildTaskBody, buildTaskUpdateBody, createTaskWithTargets, describeTaskTargets,
-  parseFieldAssignments, RecordWriteError, renderWriteDryRun, renderWriteSuccess,
+  buildTaskBody, buildTaskUpdateBody, commentPreview, createCommentOnTask, createTaskWithTargets,
+  defaultTaskStatus, describeTaskTargets, parseFieldAssignments, RecordWriteError,
+  renderWriteDryRun, renderWriteSuccess, requireTaskCreateGuards,
 } from "../src/commands/recordWrite.ts";
 import {
-  enrichTasks, fetchTargetsForTasks, fetchTasks, formatDue, listWorkspaceMembers, parseDueAt,
-  renderTaskDetail, renderTaskList, resolveMember, statusHint, TaskError, taskIdsForTarget,
+  enrichTasks, fetchComments, fetchTargetsForTasks, fetchTasks, formatDue, listWorkspaceMembers,
+  parkDue, parseDueAt, renderCommentList, renderTaskDetail, renderTaskList, resolveMember,
+  statusHint, TaskError, taskIdsForTarget,
   type WorkspaceMember,
 } from "../src/commands/tasks.ts";
 import { toTable } from "../src/output.ts";
@@ -52,6 +56,15 @@ describe("task status", () => {
     expect(normaliseTaskStatus("On_Hold")).toBe("ON_HOLD");
   });
 
+  // Measured against the live metadata on 2026-08-31: the board runs on six
+  // statuses since the Trello→CATO field work landed.
+  it("knows the six live statuses, including INBOX and IN_REVIEW", () => {
+    expect([...TASK_STATUS_VALUES]).toEqual(["INBOX", "TODO", "IN_PROGRESS", "IN_REVIEW", "ON_HOLD", "DONE"]);
+    expect(isKnownTaskStatus("inbox")).toBe(true);
+    expect(isKnownTaskStatus("in review")).toBe(true);
+    expect(statusHint("inbox")).toBeNull();
+  });
+
   // The stage enum refuses unknown values; the status enum deliberately does
   // not, so a status added in CATO's UI works without a CLI release. The CRM
   // still answers HTTP 400 on a typo — verified live on 2026-08-24.
@@ -77,6 +90,23 @@ describe("buildTaskFilter", () => {
     expect(f).toContain('status[eq]:"TODO"');
     expect(f).toContain('assigneeId[eq]:"wm-1"');
     expect(f).toContain('title[ilike]:"%bel%"');
+  });
+
+  it("filters on board, priority, source and labels (containsAny), forgiving about spelling", () => {
+    const f = buildTaskFilter({ board: "prudai", priority: "High", source: "agent", labels: ["bug", "feature request"] })!;
+    expect(f).toContain('board[eq]:"PRUDAI"');
+    expect(f).toContain('priority[eq]:"HIGH"');
+    expect(f).toContain('source[eq]:"AGENT"');
+    expect(f).toContain("labels[containsAny]:[BUG,FEATURE_REQUEST]");
+  });
+
+  // These four ARE enforced, unlike --status: a typo that silently matched
+  // nothing would misreport the board.
+  it("refuses an unknown board, label, priority or source loudly", () => {
+    expect(() => buildTaskFilter({ board: "TRELLO" })).toThrow(FilterError);
+    expect(() => buildTaskFilter({ labels: ["BUG", "URGENT"] })).toThrow(/--label/);
+    expect(() => buildTaskFilter({ priority: "CRITICAL" })).toThrow(/HIGH, MEDIUM, LOW/);
+    expect(() => buildTaskFilter({ source: "N8N" })).toThrow(FilterError);
   });
 
   // A card that is due "before 4 September" is still due on the 4th itself.
@@ -158,19 +188,63 @@ describe("planList for tasks", () => {
   });
 
   it("knows every tasks verb and keeps --field values whole", () => {
-    for (const verb of ["list", "get", "search", "create", "update", "complete", "delete"]) {
+    for (const verb of ["list", "get", "search", "create", "update", "complete", "done", "claim", "park", "comment", "comments", "delete"]) {
       expect(COMMAND_TREE.tasks).toContain(verb);
     }
     const parsed = parseArgs(
-      ["tasks", "create", "--title", "x", "--field", "labels=a,b", "--field", "bord=Prudai"],
+      ["tasks", "create", "--title", "x", "--field", "tags=a,b", "--field", "vak=Prudai"],
       COMMAND_TREE, flagSpecsFor,
     );
     expect(parsed.errors).toEqual([]);
-    expect(parsed.flags.field).toEqual(["labels=a,b", "bord=Prudai"]);
+    expect(parsed.flags.field).toEqual(["tags=a,b", "vak=Prudai"]);
     const complete = parseArgs(["tasks", "complete", "t-1", "--no-dry-run", "--yes"], COMMAND_TREE, flagSpecsFor);
     expect(complete.command).toEqual(["tasks", "complete"]);
     expect(complete.positionals).toEqual(["t-1"]);
     expect(resolveWriteGate(complete.flags).dryRun).toBe(false);
+  });
+
+  it("parses the new create flags, --no-due/--no-target included", () => {
+    const parsed = parseArgs([
+      "tasks", "create", "--title", "x", "--board", "PRUDAI", "--label", "BUG,RESEARCH",
+      "--priority", "HIGH", "--source", "AGENT", "--betrokkenen", "BEAU,GEERT",
+      "--legacy-ref", "prudai#128", "--source-link", "https://x", "--no-due", "--no-target",
+    ], COMMAND_TREE, flagSpecsFor);
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.flags).toMatchObject({
+      board: "PRUDAI", label: ["BUG", "RESEARCH"], priority: "HIGH", source: "AGENT",
+      betrokkenen: ["BEAU", "GEERT"], "legacy-ref": "prudai#128", "source-link": "https://x",
+      "no-due": true, "no-target": true,
+    });
+  });
+
+  it("parses claim, park, done, comment and comments the way the skills will call them", () => {
+    const claim = parseArgs(["tasks", "claim", "t-1", "--assignee", "codex", "--no-dry-run", "--yes"], COMMAND_TREE, flagSpecsFor);
+    expect(claim.errors).toEqual([]);
+    expect(claim.command).toEqual(["tasks", "claim"]);
+    expect(claim.positionals).toEqual(["t-1"]);
+    const park = parseArgs(["tasks", "park", "t-1", "--due", "2026-09-14"], COMMAND_TREE, flagSpecsFor);
+    expect(park.errors).toEqual([]);
+    const done = parseArgs(["tasks", "done", "t-1", "--no-dry-run", "--yes"], COMMAND_TREE, flagSpecsFor);
+    expect(done.command).toEqual(["tasks", "done"]);
+    const comment = parseArgs(["tasks", "comment", "t-1", "--body", "🤖 opgepakt"], COMMAND_TREE, flagSpecsFor);
+    expect(comment.errors).toEqual([]);
+    expect(comment.flags.body).toBe("🤖 opgepakt");
+    const comments = parseArgs(["tasks", "comments", "t-1"], COMMAND_TREE, flagSpecsFor);
+    expect(comments.errors).toEqual([]);
+    expect(comments.command).toEqual(["tasks", "comments"]);
+  });
+
+  it("wires the new list filters through planList", () => {
+    const parsed = parseArgs(
+      ["tasks", "list", "--board", "PRUDAI", "--label", "BUG", "--priority", "HIGH", "--source", "AGENT"],
+      COMMAND_TREE, flagSpecsFor,
+    );
+    expect(parsed.errors).toEqual([]);
+    const plan = planList("tasks", parsed.flags);
+    expect(plan.filter).toContain('board[eq]:"PRUDAI"');
+    expect(plan.filter).toContain("labels[containsAny]:[BUG]");
+    expect(plan.filter).toContain('priority[eq]:"HIGH"');
+    expect(plan.filter).toContain('source[eq]:"AGENT"');
   });
 });
 
@@ -213,17 +287,31 @@ describe("parseDueAt", () => {
 
 describe("parseFieldAssignments", () => {
   it("writes key=value as a string and key:=json as JSON", () => {
-    expect(parseFieldAssignments(["bord=Prudai", "prio:=3", "labels:=[\"a\",\"b\"]", "flag:=true", "x:=null"]))
-      .toEqual({ bord: "Prudai", prio: 3, labels: ["a", "b"], flag: true, x: null });
+    expect(parseFieldAssignments(["vak=Prudai", "prio:=3", "tags:=[\"a\",\"b\"]", "flag:=true", "x:=null"]))
+      .toEqual({ vak: "Prudai", prio: 3, tags: ["a", "b"], flag: true, x: null });
+  });
+
+  // `bord` was the board field's working name before it landed as `board`; the
+  // muscle memory gets the own-flag error, not a CATO 400 on a ghost field.
+  it("refuses the legacy spelling bord", () => {
+    expect(() => parseFieldAssignments(["bord=Prudai"])).toThrow(/own flag/);
   });
 
   it("keeps a comma and an = inside the value", () => {
-    expect(parseFieldAssignments(["labels=a,b", "note=x=y"])).toEqual({ labels: "a,b", note: "x=y" });
+    expect(parseFieldAssignments(["tags=a,b", "note=x=y"])).toEqual({ tags: "a,b", note: "x=y" });
   });
 
   it("refuses fields that have their own flag, so they cannot skip validation", () => {
     expect(() => parseFieldAssignments(["status=FOO"])).toThrow(/own flag/);
     expect(() => parseFieldAssignments(["dueAt=2026-09-04"])).toThrow(RecordWriteError);
+    // The board fields grew real flags in this release; --field must not offer
+    // a validation bypass around them.
+    for (const owned of ["board=X", "labels:=[\"BUG\"]", "priority=HIGH", "source=AGENT", "betrokkenen:=[\"BEAU\"]", "legacyRef=x", "sourceLink=y"]) {
+      expect(() => parseFieldAssignments([owned])).toThrow(/own flag/);
+    }
+    // lastCommentAt/lastCommentPreview stay open on purpose: the Trello
+    // migration backfills them via --field.
+    expect(parseFieldAssignments(["lastCommentPreview=uit Trello"])).toEqual({ lastCommentPreview: "uit Trello" });
   });
 
   it("refuses malformed input and invalid JSON", () => {
@@ -557,15 +645,34 @@ describe("renderTaskDetail", () => {
 
   it("shows every field, the targets with ids, and the body as markdown", () => {
     const text = renderTaskDetail(row, { json: false, csv: false });
-    expect(text).toContain(`id          ${RAW_TASKS[0]!.id}`);
-    expect(text).toContain("status      TODO");
-    expect(text).toContain("due         2026-09-04");
-    expect(text).toContain("assignee    Beau Jonkhout");
-    expect(text).toContain("createdBy   cato-cli (API)");
+    expect(text).toContain(`id           ${RAW_TASKS[0]!.id}`);
+    expect(text).toContain("status       TODO");
+    expect(text).toContain("due          2026-09-04");
+    expect(text).toContain("assignee     Beau Jonkhout");
+    expect(text).toContain("createdBy    cato-cli (API)");
     // The second target lines up under the first, in the value column.
-    expect(text).toContain("targets     company: Bouwman Advocaten (c-1)\n            opportunity: LEO pilot (o-1)");
+    expect(text).toContain("targets      company: Bouwman Advocaten (c-1)\n             opportunity: LEO pilot (o-1)");
     expect(text).toContain("body:\n  - eerst bellen\n  - dan mailen");
     expect(text).toContain(`${BASE}/object/task/${RAW_TASKS[0]!.id}`);
+    expect(text).not.toContain("[object Object]");
+  });
+
+  it("shows the board fields readably: multi-selects joined, the link as its URL, the last comment with its date", () => {
+    const enriched = enrichTasks([{
+      ...RAW_TASKS[0]!,
+      board: "PRUDAI", priority: "HIGH", source: "AGENT",
+      labels: ["BUG", "RESEARCH"], betrokkenen: ["BEAU", "GEERT"],
+      sourceLink: { primaryLinkLabel: "", primaryLinkUrl: "https://prudai.sharepoint.com/x", secondaryLinks: [] },
+      legacyRef: "prudai#128 · abc",
+      lastCommentAt: "2026-08-31T08:00:00.000Z", lastCommentPreview: "🤖 opgepakt",
+    }], TARGETS, MEMBERS, BASE)[0]!;
+    const text = renderTaskDetail(enriched, { json: false, csv: false });
+    expect(text).toContain("board        PRUDAI");
+    expect(text).toContain("labels       BUG, RESEARCH");
+    expect(text).toContain("betrokkenen  BEAU, GEERT");
+    expect(text).toContain("sourceLink   https://prudai.sharepoint.com/x");
+    expect(text).toContain("legacyRef    prudai#128 · abc");
+    expect(text).toContain("lastComment  🤖 opgepakt  (2026-08-31 10:00)");
     expect(text).not.toContain("[object Object]");
   });
 
@@ -592,5 +699,186 @@ describe("toTable url column", () => {
   it("honours a per-column width override", () => {
     const table = toTable([{ title: "y".repeat(60) }], ["title"], { title: 60 });
     expect(table).not.toContain("…");
+  });
+});
+
+// ---- board fields in the write bodies ---------------------------------------
+
+describe("task board fields", () => {
+  it("writes board, labels, priority, source, betrokkenen, legacyRef and the LINKS composite", () => {
+    const body = buildTaskBody({
+      title: "t", board: "prudai", labels: ["bug", "feature request"], priority: "high",
+      source: "agent", betrokkenen: ["beau", "GEERT"], legacyRef: " prudai#128 · abc ",
+      sourceLink: "https://prudai.sharepoint.com/verslag",
+    });
+    expect(body).toMatchObject({
+      board: "PRUDAI",
+      labels: ["BUG", "FEATURE_REQUEST"],
+      priority: "HIGH",
+      source: "AGENT",
+      betrokkenen: ["BEAU", "GEERT"],
+      legacyRef: "prudai#128 · abc",
+      sourceLink: { primaryLinkLabel: "", primaryLinkUrl: "https://prudai.sharepoint.com/verslag", secondaryLinks: [] },
+    });
+  });
+
+  it("refuses unknown values and a relative source link — CATO's 400 is not the first line of defence", () => {
+    expect(() => buildTaskBody({ title: "t", board: "TRELLO" })).toThrow(/--board/);
+    expect(() => buildTaskBody({ title: "t", labels: ["URGENT"] })).toThrow(RecordWriteError);
+    expect(() => buildTaskBody({ title: "t", betrokkenen: ["YME"] })).toThrow(/BEAU, GEERT, BAS, ROLAND, CODEX/);
+    expect(() => buildTaskBody({ title: "t", sourceLink: "sharepoint/verslag" })).toThrow(/absolute URL/);
+  });
+
+  it("PATCHes the board fields on update too, and only what was passed", () => {
+    expect(buildTaskUpdateBody({ labels: ["BUG"] })).toEqual({ labels: ["BUG"] });
+    expect(buildTaskUpdateBody({ board: "PRODUCT", priority: "low" })).toEqual({ board: "PRODUCT", priority: "LOW" });
+    expect(() => buildTaskUpdateBody({})).toThrow(/Nothing to write/);
+  });
+});
+
+// ---- create defaults and guards ---------------------------------------------
+
+describe("defaultTaskStatus", () => {
+  // The board rule: agents land in the Inbox, Beau/Geert triage (02-taakmodel §1.2).
+  it("sends agent-made work to INBOX and hand-made work to TODO", () => {
+    expect(defaultTaskStatus("AGENT")).toBe("INBOX");
+    expect(defaultTaskStatus("memo")).toBe("INBOX");
+    expect(defaultTaskStatus("Chat")).toBe("INBOX");
+    expect(defaultTaskStatus("MANUAL")).toBe("TODO");
+    expect(defaultTaskStatus(undefined)).toBe("TODO");
+  });
+});
+
+describe("requireTaskCreateGuards", () => {
+  const ok = { board: "PRUDAI", due: "2026-09-04", targets: { companyId: "c-1" } };
+
+  it("passes a complete create and both explicit escape hatches", () => {
+    expect(() => requireTaskCreateGuards(ok)).not.toThrow();
+    expect(() => requireTaskCreateGuards({ board: "PRUDAI", noDue: true, targets: {}, noTarget: true })).not.toThrow();
+  });
+
+  it("demands a board on every card", () => {
+    expect(() => requireTaskCreateGuards({ ...ok, board: undefined })).toThrow(/--board/);
+    expect(() => requireTaskCreateGuards({ ...ok, board: "  " })).toThrow(RecordWriteError);
+  });
+
+  it("demands a due date unless --no-due is said out loud", () => {
+    expect(() => requireTaskCreateGuards({ ...ok, due: undefined })).toThrow(/--no-due/);
+    expect(() => requireTaskCreateGuards({ ...ok, noDue: true })).toThrow(/contradict/);
+  });
+
+  it("demands a target unless --no-target is said out loud", () => {
+    expect(() => requireTaskCreateGuards({ ...ok, targets: {} })).toThrow(/--no-target/);
+    expect(() => requireTaskCreateGuards({ ...ok, targets: { opportunityId: "o-1" }, noTarget: true })).toThrow(/contradicts/);
+    expect(() => requireTaskCreateGuards({ ...ok, targets: { personId: "p-1" } })).not.toThrow();
+  });
+});
+
+// ---- comments ---------------------------------------------------------------
+
+describe("commentPreview", () => {
+  it("keeps a short comment as-is, whitespace flattened", () => {
+    expect(commentPreview("🤖 opgepakt")).toBe("🤖 opgepakt");
+    expect(commentPreview("  regel een\n  regel twee  ")).toBe("regel een regel twee");
+  });
+
+  it("cuts near 120 characters on a word boundary, with an ellipsis", () => {
+    const long = `${"woord ".repeat(30)}staart`; // 186 chars
+    const cut = commentPreview(long);
+    expect(cut.length).toBeLessThanOrEqual(121);
+    expect(cut.endsWith("…")).toBe(true);
+    expect(cut).not.toContain("staart");
+    // No half word before the ellipsis: the cut lands on a boundary.
+    expect(cut.slice(0, -1).endsWith("woord")).toBe(true);
+  });
+
+  it("hard-cuts a single unbroken token instead of returning almost nothing", () => {
+    const token = "x".repeat(200);
+    const cut = commentPreview(token);
+    expect(cut).toBe(`${"x".repeat(120)}…`);
+  });
+
+  it("respects an explicit maximum", () => {
+    expect(commentPreview("een twee drie vier", 8)).toBe("een twee…");
+  });
+});
+
+describe("createCommentOnTask", () => {
+  const NOW = new Date("2026-08-31T09:30:00.000Z");
+
+  it("creates the comment record and stamps the card's last-comment fields", async () => {
+    const { client, calls } = routedClient([["/rest/comments", { data: { createComment: { id: "cm-1" } } }]]);
+    const outcome = await createCommentOnTask(client, "t-1", "🤖 opgepakt in sessie X", NOW);
+    expect(outcome).toEqual({
+      commentId: "cm-1", taskId: "t-1",
+      lastCommentAt: "2026-08-31T09:30:00.000Z", preview: "🤖 opgepakt in sessie X",
+    });
+    expect(calls[0]).toMatchObject({
+      endpoint: "/rest/comments", method: "POST",
+      body: { body: "🤖 opgepakt in sessie X", name: "🤖 opgepakt in sessie X", taskId: "t-1" },
+    });
+    expect(calls[1]).toMatchObject({
+      endpoint: "/rest/tasks/t-1", method: "PATCH",
+      body: { lastCommentAt: "2026-08-31T09:30:00.000Z", lastCommentPreview: "🤖 opgepakt in sessie X" },
+    });
+  });
+
+  it("keeps the comment and fails loudly when stamping the card fails", async () => {
+    const { client, calls } = routedClient([
+      ["/rest/tasks/t-1", new Error("HTTP 500")],
+      ["/rest/comments", { data: { createComment: { id: "cm-2" } } }],
+    ]);
+    await expect(createCommentOnTask(client, "t-1", "tekst", NOW))
+      .rejects.toThrow(/Comment cm-2 was created, but stamping/);
+    // No DELETE anywhere: the comment is the substance and must survive.
+    expect(calls.every((c) => c.method !== "DELETE")).toBe(true);
+  });
+
+  it("refuses to continue when no comment id comes back", async () => {
+    const { client } = routedClient([["/rest/comments", { data: {} }]]);
+    await expect(createCommentOnTask(client, "t-1", "tekst", NOW)).rejects.toThrow(/no id came back/);
+  });
+});
+
+describe("fetchComments + renderCommentList", () => {
+  it("asks for the task's comments oldest first and maps the actor", async () => {
+    const { client, decoded } = routedClient([["/rest/comments", { data: { comments: [
+      { id: "cm-1", body: "🤖 opgepakt", createdAt: "2026-08-30T08:00:00.000Z", createdBy: { name: "cato-cli", source: "API" } },
+      { id: "cm-2", body: "✅ opgeleverd\nzie PR", createdAt: "2026-08-31T09:00:00.000Z", createdBy: { name: "Beau Jonkhout" } },
+    ] } }]]);
+    const rows = await fetchComments(client, "t-1");
+    expect(decoded()[0]).toContain('taskId[eq]:"t-1"');
+    expect(decoded()[0]).toContain("deletedAt[is]:NULL");
+    expect(decoded()[0]).toContain("order_by=createdAt[AscNullsFirst]");
+    expect(rows).toEqual([
+      { id: "cm-1", body: "🤖 opgepakt", createdAt: "2026-08-30T08:00:00.000Z", author: "cato-cli (API)" },
+      { id: "cm-2", body: "✅ opgeleverd\nzie PR", createdAt: "2026-08-31T09:00:00.000Z", author: "Beau Jonkhout" },
+    ]);
+
+    const text = renderCommentList(rows, `${BASE}/object/task/t-1`, { json: false, csv: false });
+    expect(text).toContain("2026-08-30 10:00  cato-cli (API)"); // Amsterdam time, CEST
+    expect(text).toContain("  🤖 opgepakt");
+    expect(text).toContain("  ✅ opgeleverd\n  zie PR");
+    expect(text.indexOf("cm-1") === -1 || text.indexOf("🤖") < text.indexOf("✅")).toBe(true);
+    expect(text).toContain(`2 comment(s)  ${BASE}/object/task/t-1`);
+  });
+
+  it("says so when the thread is empty, and gives --json the raw rows", () => {
+    expect(renderCommentList([], `${BASE}/object/task/t-1`, { json: false, csv: false }))
+      .toBe(`(no comments)\n\n${BASE}/object/task/t-1`);
+    expect(JSON.parse(renderCommentList([], `${BASE}/object/task/t-1`, { json: true, csv: false }))).toEqual([]);
+  });
+});
+
+// ---- park -------------------------------------------------------------------
+
+describe("parkDue", () => {
+  it("is the calendar day 14 days out, at midnight Europe/Amsterdam", () => {
+    // 31-08 23:30 UTC is already 01-09 in Amsterdam: the shift counts in the
+    // team's calendar, not the host's.
+    expect(parkDue(new Date("2026-08-31T23:30:00.000Z"))).toBe(parseDueAt("2026-09-15"));
+    expect(parkDue(new Date("2026-08-31T10:00:00.000Z"))).toBe(parseDueAt("2026-09-14"));
+    // Across the October DST changeover the due lands on midnight CET.
+    expect(parkDue(new Date("2026-10-20T10:00:00.000Z"))).toBe(parseDueAt("2026-11-03"));
   });
 });

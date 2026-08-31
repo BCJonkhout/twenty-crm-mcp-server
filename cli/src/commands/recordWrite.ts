@@ -11,7 +11,10 @@ import {
   createTargetsForRecord, extractId, transformBodyField,
   transformCompanyData, transformPersonData,
 } from "@twenty-crm/core";
-import { normaliseTaskStatus, OPPORTUNITY_STAGE_VALUES } from "../filters.ts";
+import {
+  normaliseSelectValue, normaliseTaskStatus, OPPORTUNITY_STAGE_VALUES,
+  TASK_BETROKKENEN_VALUES, TASK_BOARD_VALUES, TASK_LABEL_VALUES, TASK_PRIORITY_VALUES, TASK_SOURCE_VALUES,
+} from "../filters.ts";
 import { recordUrl } from "../urls.ts";
 
 export class RecordWriteError extends Error {}
@@ -57,7 +60,18 @@ export interface TaskFlags {
   /** Already an ISO timestamp — see parseDueAt in commands/tasks.ts. */
   dueAt?: string;
   assigneeId?: string;
-  /** Pass-through fields from --field key=value (custom fields such as `bord`). */
+  /** SELECT PRUDAI | PRODUCT. Required on create. */
+  board?: string;
+  /** MULTI_SELECT; a write replaces the whole set. */
+  labels?: string[];
+  priority?: string;
+  source?: string;
+  /** MULTI_SELECT; a write replaces the whole set. */
+  betrokkenen?: string[];
+  legacyRef?: string;
+  /** Absolute URL; becomes the LINKS composite. */
+  sourceLink?: string;
+  /** Pass-through fields from --field key=value (custom fields the flags do not know yet). */
   fields?: Record<string, unknown>;
 }
 
@@ -160,6 +174,11 @@ export function buildNoteUpdateBody(flags: NoteFlags): Record<string, unknown> {
  */
 export const TASK_FLAG_OWNED_FIELDS = new Set([
   "title", "status", "dueAt", "assigneeId", "bodyV2", "body",
+  "board", "labels", "priority", "source", "betrokkenen", "legacyRef", "sourceLink",
+  // `bord` was the working name for the board field before it landed as `board`
+  // (old README examples used it); the live field does not exist under that
+  // name, so catch the muscle memory here instead of relaying CATO's 400.
+  "bord",
   "id", "createdAt", "updatedAt", "deletedAt", "createdBy", "updatedBy",
 ]);
 
@@ -190,6 +209,39 @@ export function parseFieldAssignments(
   return out;
 }
 
+/**
+ * The task SELECT/MULTI_SELECT flags ARE enforced (unlike --status): they sit
+ * on stable board config, and the friendly error beats CATO's raw 400.
+ */
+function taskSelect(flag: string, value: string, allowed: readonly string[]): string {
+  const v = normaliseSelectValue(value);
+  if (!allowed.includes(v)) {
+    throw new RecordWriteError(`--${flag}: '${value}' is not a valid value. Allowed: ${allowed.join(", ")}.`);
+  }
+  return v;
+}
+
+/** The Trello→CATO board fields, shared by the create and update bodies. */
+function applyBoardFields(body: Record<string, unknown>, flags: TaskFlags): void {
+  if (flags.board?.trim()) body.board = taskSelect("board", flags.board, TASK_BOARD_VALUES);
+  if (flags.labels && flags.labels.length > 0) {
+    body.labels = flags.labels.map((l) => taskSelect("label", l, TASK_LABEL_VALUES));
+  }
+  if (flags.priority?.trim()) body.priority = taskSelect("priority", flags.priority, TASK_PRIORITY_VALUES);
+  if (flags.source?.trim()) body.source = taskSelect("source", flags.source, TASK_SOURCE_VALUES);
+  if (flags.betrokkenen && flags.betrokkenen.length > 0) {
+    body.betrokkenen = flags.betrokkenen.map((b) => taskSelect("betrokkenen", b, TASK_BETROKKENEN_VALUES));
+  }
+  if (flags.legacyRef?.trim()) body.legacyRef = flags.legacyRef.trim();
+  if (flags.sourceLink?.trim()) {
+    const url = flags.sourceLink.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      throw new RecordWriteError(`--source-link must be an absolute URL, got '${url}'.`);
+    }
+    body.sourceLink = { primaryLinkLabel: "", primaryLinkUrl: url, secondaryLinks: [] };
+  }
+}
+
 export function buildTaskBody(flags: TaskFlags): Record<string, unknown> {
   if (!flags.title?.trim()) throw new RecordWriteError("cato tasks create needs --title.");
   const body: Record<string, unknown> = { ...(flags.fields ?? {}), title: flags.title.trim() };
@@ -199,6 +251,7 @@ export function buildTaskBody(flags: TaskFlags): Record<string, unknown> {
   if (flags.status?.trim()) body.status = normaliseTaskStatus(flags.status);
   if (flags.dueAt) body.dueAt = flags.dueAt;
   if (flags.assigneeId) body.assigneeId = flags.assigneeId;
+  applyBoardFields(body, flags);
   return body;
 }
 
@@ -212,12 +265,132 @@ export function buildTaskUpdateBody(flags: TaskFlags): Record<string, unknown> {
   if (flags.status?.trim()) body.status = normaliseTaskStatus(flags.status);
   if (flags.dueAt) body.dueAt = flags.dueAt;
   if (flags.assigneeId) body.assigneeId = flags.assigneeId;
+  applyBoardFields(body, flags);
   if (Object.keys(body).length === 0) {
     throw new RecordWriteError(
-      "Nothing to write: pass --title, --status, --due, --assignee-id, --body/--body-file or --field.",
+      "Nothing to write: pass --title, --status, --due, --assignee-id, --body/--body-file, " +
+      "--board/--label/--priority/--source/--betrokkenen/--source-link/--legacy-ref or --field.",
     );
   }
   return body;
+}
+
+// ---- create-time board rules ----------------------------------------------
+
+/** Sources whose tasks land in the Inbox: agents create, Beau/Geert triage. */
+export const INBOX_SOURCES = new Set(["AGENT", "MEMO", "CHAT"]);
+
+/**
+ * Where a new task starts when the caller does not say: agent-made work
+ * (AGENT/MEMO/CHAT) goes to INBOX for triage, hand-made work straight to TODO.
+ * An explicit --status always wins over this.
+ */
+export function defaultTaskStatus(source: string | undefined): "INBOX" | "TODO" {
+  if (source && INBOX_SOURCES.has(normaliseSelectValue(source))) return "INBOX";
+  return "TODO";
+}
+
+export interface TaskCreateGuardInput {
+  board?: string;
+  due?: string;
+  noDue?: boolean;
+  targets: TaskTargets;
+  noTarget?: boolean;
+}
+
+/**
+ * The board rules `tasks create` enforces (02-taakmodel §1.5, §0/beslispunt 9):
+ * every card names its board, carries a due date, and hangs off the customer it
+ * touches. The escape hatches (--no-due, --no-target) exist but must be said
+ * out loud — a forgotten flag and a deliberate exception must not look alike.
+ */
+export function requireTaskCreateGuards(g: TaskCreateGuardInput): void {
+  if (!g.board?.trim()) {
+    throw new RecordWriteError(
+      `cato tasks create needs --board (${TASK_BOARD_VALUES.join(" or ")}) — every card lives on a board.`,
+    );
+  }
+  if (g.due && g.noDue) {
+    throw new RecordWriteError("--due and --no-due contradict each other; pass one of them.");
+  }
+  if (!g.due && !g.noDue) {
+    throw new RecordWriteError(
+      "cato tasks create needs --due <date> — board rule: every card carries a due date. " +
+      "A task that truly has none takes an explicit --no-due.",
+    );
+  }
+  const hasTarget = Boolean(g.targets.companyId || g.targets.personId || g.targets.opportunityId);
+  if (hasTarget && g.noTarget) {
+    throw new RecordWriteError("--no-target contradicts the --company-id/--person-id/--opportunity-id you passed; drop one.");
+  }
+  if (!hasTarget && !g.noTarget) {
+    throw new RecordWriteError(
+      "cato tasks create needs a target (--company-id, --person-id and/or --opportunity-id) — a task that " +
+      "touches a customer hangs off that customer, and the customer-timeline line only appears when the link " +
+      "is made at creation. Internal work takes an explicit --no-target.",
+    );
+  }
+}
+
+// ---- comments on tasks -----------------------------------------------------
+
+/** What lastCommentPreview holds: the first ~120 characters (02-taakmodel §1.1). */
+export const COMMENT_PREVIEW_LENGTH = 120;
+
+/**
+ * One line for the card: whitespace collapsed, cut near `max` characters on a
+ * word boundary when one is close enough, with an ellipsis marking the cut.
+ */
+export function commentPreview(body: string, max: number = COMMENT_PREVIEW_LENGTH): string {
+  const flat = body.replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+export interface CommentOutcome {
+  commentId: string;
+  taskId: string;
+  lastCommentAt: string;
+  preview: string;
+}
+
+/**
+ * A comment is a `comment` record hanging off the task, PLUS the two derived
+ * fields on the card (lastCommentAt/lastCommentPreview) that stand in for
+ * Trello's comment badge. When the PATCH fails the comment is NOT rolled back:
+ * the comment is the substance, the card fields are derived — failing loudly
+ * beats losing what was said.
+ */
+export async function createCommentOnTask(
+  client: RestClient,
+  taskId: string,
+  bodyText: string,
+  now: Date = new Date(),
+): Promise<CommentOutcome> {
+  const preview = commentPreview(bodyText);
+  const created = await client.request("/rest/comments", {
+    method: "POST",
+    // `name` is the record label the UI shows in chips and lists; without it
+    // every comment reads "Untitled".
+    body: { body: bodyText, name: preview, taskId },
+  });
+  const commentId = extractId(created);
+  if (!commentId) throw new RecordWriteError("Creating the comment failed: no id came back.");
+  const lastCommentAt = now.toISOString();
+  try {
+    await client.request(`/rest/tasks/${encodeURIComponent(taskId)}`, {
+      method: "PATCH",
+      body: { lastCommentAt, lastCommentPreview: preview },
+    });
+  } catch (err) {
+    throw new RecordWriteError(
+      `Comment ${commentId} was created, but stamping lastCommentAt/lastCommentPreview on task ${taskId} ` +
+      `failed: ${String(err)}. The comment stands; re-run or fix the card by hand.`,
+    );
+  }
+  return { commentId, taskId, lastCommentAt, preview };
 }
 
 /**

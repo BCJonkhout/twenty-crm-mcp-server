@@ -403,6 +403,14 @@ async function runTasks(
     return 0;
   }
 
+  if (sub === "comments") {
+    if (!id) throw new CliError("cato tasks comments needs a task id.");
+    // A wrong id must not masquerade as "no comments yet".
+    if (!(await tasks.fetchTask(client, id))) throw new CliError(`No task ${id}.`);
+    out(tasks.renderCommentList(await tasks.fetchComments(client, id), recordUrl(baseUrl, "task", id), ctx));
+    return 0;
+  }
+
   const gate = resolveWriteGate(flags);
   if (gate.blockedReason) throw new CliError(gate.blockedReason);
 
@@ -413,11 +421,67 @@ async function runTasks(
     return 0;
   }
 
-  if (sub === "complete") {
-    if (!id) throw new CliError("cato tasks complete needs a task id.");
+  if (sub === "complete" || sub === "done") {
+    if (!id) throw new CliError(`cato tasks ${sub} needs a task id.`);
     const body = { status: "DONE" };
     if (gate.dryRun) { out(write.renderWriteDryRun("update", "tasks", body, id)); return 0; }
     showWrite(await write.updateRecord(client, "tasks", id, body, baseUrl), body, ctx);
+    return 0;
+  }
+
+  if (sub === "claim") {
+    if (!id) throw new CliError("cato tasks claim needs a task id.");
+    if (!assigneeId) {
+      throw new CliError("cato tasks claim needs --assignee <name|email> (or --assignee-id) — claiming means taking it on by name.");
+    }
+    const body = { status: "IN_PROGRESS", assigneeId };
+    if (gate.dryRun) { out(write.renderWriteDryRun("update", "tasks", body, id)); return 0; }
+    showWrite(await write.updateRecord(client, "tasks", id, body, baseUrl), body, ctx);
+    return 0;
+  }
+
+  if (sub === "park") {
+    if (!id) throw new CliError("cato tasks park needs a task id.");
+    const parkDueFlag = flagString(flags, "due");
+    const body = { status: "ON_HOLD", dueAt: parkDueFlag ? tasks.parseDueAt(parkDueFlag) : tasks.parkDue() };
+    const extra = parkDueFlag ? [] : ["due defaulted to 14 days from today — the board rule: parked cards come back"];
+    if (gate.dryRun) { out(write.renderWriteDryRun("update", "tasks", body, id, undefined, extra)); return 0; }
+    showWrite(await write.updateRecord(client, "tasks", id, body, baseUrl), body, ctx, extra);
+    return 0;
+  }
+
+  if (sub === "comment") {
+    if (!id) throw new CliError("cato tasks comment needs a task id.");
+    const text = await readBodyFlags(flags);
+    if (!text?.trim()) throw new CliError("cato tasks comment needs --body or --body-file.");
+    const preview = write.commentPreview(text);
+    const taskUrl = recordUrl(baseUrl, "task", id);
+    if (gate.dryRun) {
+      out([
+        "DRY RUN — no comment was created.",
+        "",
+        `Task   : ${id}`,
+        "Comment:",
+        ...text.split("\n").map((l) => `  ${l}`),
+        "",
+        `Also stamps the card: lastCommentAt = now, lastCommentPreview = '${preview}'.`,
+        "",
+        "Re-run with --no-dry-run --yes to apply.",
+      ].join("\n"));
+      return 0;
+    }
+    const outcome = await write.createCommentOnTask(client, id, text);
+    if (ctx.json) {
+      out(JSON.stringify({ action: "create", object: "comments", id: outcome.commentId, taskId: id, preview: outcome.preview, url: taskUrl }, null, 2));
+      return 0;
+    }
+    out([
+      `Created comment ${outcome.commentId} on task ${id}`,
+      `  preview: ${outcome.preview}`,
+      `  lastCommentAt: ${outcome.lastCommentAt}`,
+      "",
+      taskUrl,
+    ].join("\n"));
     return 0;
   }
 
@@ -428,6 +492,13 @@ async function runTasks(
     status: flagString(flags, "status"),
     dueAt: due ? tasks.parseDueAt(due) : undefined,
     assigneeId,
+    board: flagString(flags, "board"),
+    labels: flagList(flags, "label"),
+    priority: flagString(flags, "priority"),
+    source: flagString(flags, "source"),
+    betrokkenen: flagList(flags, "betrokkenen"),
+    legacyRef: flagString(flags, "legacy-ref"),
+    sourceLink: flagString(flags, "source-link"),
     fields: write.parseFieldAssignments(flagList(flags, "field") ?? []),
   };
   const hint = tasks.statusHint(taskFlags.status);
@@ -448,19 +519,32 @@ async function runTasks(
   }
 
   if (sub === "create") {
-    const body = write.buildTaskBody(taskFlags);
     const targets: write.TaskTargets = {
       companyId: flagString(flags, "company-id"),
       personId: flagString(flags, "person-id"),
       opportunityId: flagString(flags, "opportunity-id"),
     };
-    const linked = write.describeTaskTargets(targets);
+    write.requireTaskCreateGuards({
+      board: taskFlags.board,
+      due,
+      noDue: flagBool(flags, "no-due") === true,
+      targets,
+      noTarget: flagBool(flags, "no-target") === true,
+    });
+    const extra = write.describeTaskTargets(targets);
+    if (!taskFlags.status?.trim()) {
+      taskFlags.status = write.defaultTaskStatus(taskFlags.source);
+      if (taskFlags.status === "INBOX") {
+        extra.push("status defaulted to INBOX — agent-made tasks land in the Inbox for Beau/Geert to triage");
+      }
+    }
+    const body = write.buildTaskBody(taskFlags);
     if (gate.dryRun) {
-      out(write.renderWriteDryRun("create", "tasks", body, undefined, undefined, linked));
+      out(write.renderWriteDryRun("create", "tasks", body, undefined, undefined, extra));
       if (hint) out(`\n${hint}`);
       return 0;
     }
-    showWrite(await write.createTaskWithTargets(client, body, targets, baseUrl), body, ctx, linked);
+    showWrite(await write.createTaskWithTargets(client, body, targets, baseUrl), body, ctx, extra);
     return 0;
   }
 
