@@ -101,17 +101,101 @@ export function transformCompanyData(data: CompanyInput): Record<string, unknown
   return t;
 }
 
+type InlineNode =
+  | { type: "text"; text: string; styles: Record<string, boolean> }
+  | { type: "link"; href: string; content: { type: "text"; text: string; styles: Record<string, boolean> }[] };
+
+/**
+ * Markdown-inline naar BlockNote-content: vet, cursief (met een ster of een
+ * liggend streepje), `code` en [tekst](url). Bewust conservatief — wat niet als paar sluit blijft
+ * letterlijke tekst staan, zodat "5 * 3" en "a-b" ongemoeid blijven.
+ */
+function parseInline(line: string): InlineNode[] {
+  const out: InlineNode[] = [];
+  let plain = "";
+  const flush = () => {
+    if (plain) out.push({ type: "text", text: plain, styles: {} });
+    plain = "";
+  };
+  // Volgorde telt: ** vóór *, anders eet de cursief-regel de vette markering op.
+  const rules: { re: RegExp; style?: string }[] = [
+    { re: /^`([^`\n]+)`/, style: "code" },
+    { re: /^\*\*([^\n]+?)\*\*/, style: "bold" },
+    { re: /^\*([^\s*][^\n]*?)\*/, style: "italic" },
+    { re: /^_([^\s_][^\n]*?)_/, style: "italic" },
+  ];
+  let rest = line;
+  outer: while (rest.length > 0) {
+    const link = /^\[([^\]\n]+)\]\(([^)\s]+)\)/.exec(rest);
+    if (link) {
+      flush();
+      out.push({
+        type: "link",
+        href: link[2],
+        content: [{ type: "text", text: link[1], styles: {} }],
+      });
+      rest = rest.slice(link[0].length);
+      continue;
+    }
+    for (const { re, style } of rules) {
+      const m = re.exec(rest);
+      if (m) {
+        flush();
+        out.push({ type: "text", text: m[1], styles: { [style as string]: true } });
+        rest = rest.slice(m[0].length);
+        continue outer;
+      }
+    }
+    plain += rest[0];
+    rest = rest.slice(1);
+  }
+  flush();
+  return out.length > 0 ? out : [{ type: "text", text: "", styles: {} }];
+}
+
+/**
+ * Eén markdown-regel naar één BlockNote-blok. Koppen, opsommingen en
+ * genummerde lijsten krijgen hun eigen bloktype; de rest wordt een alinea.
+ */
+function lineToBlock(line: string, id: string) {
+  const props: Record<string, unknown> = {
+    textColor: "default", backgroundColor: "default", textAlignment: "left",
+  };
+  const heading = /^(#{1,3})\s+(.*)$/.exec(line);
+  if (heading) {
+    return {
+      id, type: "heading",
+      props: { ...props, level: heading[1].length },
+      content: parseInline(heading[2]), children: [],
+    };
+  }
+  const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
+  if (bullet) {
+    return { id, type: "bulletListItem", props, content: parseInline(bullet[1]), children: [] };
+  }
+  const numbered = /^\s*\d+[.)]\s+(.*)$/.exec(line);
+  if (numbered) {
+    return { id, type: "numberedListItem", props, content: parseInline(numbered[1]), children: [] };
+  }
+  return { id, type: "paragraph", props, content: parseInline(line), children: [] };
+}
+
+/**
+ * De taakbody's die agents schrijven zijn markdown. Tot 31-08-2026 werd élke
+ * regel een platte alinea, waardoor koppen, opsommingen en vet als letterlijke
+ * tekens in CATO stonden en elke lege regel een leeg blok werd — bij een body
+ * van enige lengte hield de editor er halverwege mee op. `markdown` blijft de
+ * onbewerkte brontekst; alleen `blocknote` is nu opgemaakt.
+ */
 export function transformBodyField(data: BodyInput): Record<string, unknown> {
   const t: Record<string, unknown> = { ...data };
   if (t.body === undefined) return t;
   const text = t.body as string;
-  const blocks = text.split("\n").map((line, i) => ({
-    id: `block-${Date.now()}-${i}`,
-    type: "paragraph",
-    props: { textColor: "default", backgroundColor: "default", textAlignment: "left" },
-    content: [{ type: "text", text: line, styles: {} }],
-    children: [],
-  }));
+  const stamp = Date.now();
+  const blocks = text
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line, i) => lineToBlock(line, `block-${stamp}-${i}`));
   t.bodyV2 = {
     blocknote: JSON.stringify(blocks),
     markdown: text,
