@@ -16,11 +16,32 @@ duizenden echte ontvangers.
 
 ## Installatie
 
+Op een nieuwe machine (macOS, Linux of WSL) — dit installeert bun als dat nog niet
+aanwezig is, haalt de CLI op en zet `cato` in `~/.local/bin`:
+
 ```sh
-cd /root/twenty-crm-mcp-server
-bun install
+curl -fsSL https://raw.githubusercontent.com/BCJonkhout/twenty-crm-mcp-server/main/install.sh | bash
+```
+
+Opnieuw draaien = bijwerken naar de laatste `main`. Verwijderen: `rm -rf ~/.cato ~/.local/bin/cato`.
+Op Windows werkt dit binnen WSL (`wsl --install`, terminal opnieuw openen, zelfde regel plakken);
+Git Bash is niet genoeg, de bun-installer wil een echte Linux- of macOS-omgeving.
+
+De installer schrijft nooit een sleutel — dat is een aparte stap, zodat hij niet in je
+scrollback of shell-historie belandt. Vraag Beau om een sleutel en bewaar hem met
+`cato auth set --stdin --set-default`.
+
+Wie de CLI zelf ontwikkelt werkt in een gewone kloon:
+
+```sh
+git clone https://github.com/BCJonkhout/twenty-crm-mcp-server.git
+cd twenty-crm-mcp-server && bun install
 bun run cato --help          # of: bun run cli/src/index.ts --help
 ```
+
+**Voor coding agents:** `cato guide` drukt het contract af — waar de sleutel vandaan komt,
+de schrijfpoort, en de lus waarmee je je eigen werk op het takenbord bijhoudt. Dat is de
+eerste opdracht die een agent op een verse machine hoort te draaien.
 
 ## Authenticatie
 
@@ -35,10 +56,21 @@ cato auth status             # welk profiel is actief en wat mag die sleutel
 De sleutel wordt opgeslagen in `~/.config/cato/credentials.json` met `chmod 600`.
 Volgorde van herkomst: `--profile` > `$CATO_API_KEY` > profielbestand.
 
-> **Een API-key in CATO is niet tot alleen-lezen te beperken.**
-> Er bestaat op dit moment geen rol die (a) aan een API-key gekoppeld mag worden én (b) alleen
-> leesrechten heeft. `cato auth roles` zegt dit ook expliciet als het zo is. Wie een sleutel krijgt,
-> krijgt dus schrijfrechten op productiedata. Weeg dat af voor je er één uitgeeft.
+> **Geef een sleutel de kleinst mogelijke rol.**
+> Tot 01-09-2026 was `Admin` de enige rol die aan een API-key gekoppeld mocht worden: elke
+> sleutel gaf toen dus volledige schrijf- én verwijderrechten op productiedata. Sindsdien
+> bestaat **`Agent — lezen + taken`** (`0a7eba3e-b6d5-45f2-ba20-c0ca4181b776`): alles lezen,
+> schrijven alleen op `task` en `comment`, geen verwijderrechten, geen instellingen. Dat is de
+> rol voor agent- en QA-sleutels; `Admin` alleen als een sleutel écht workspace-breed moet
+> kunnen schrijven. `cato auth roles` noemt zelf de kleinste optie die er is.
+>
+> Zo'n rol maak je met `createOneRole` + `upsertObjectPermissions` op de metadata-API.
+> Twee dingen die we daarbij gemeten hebben (01-09-2026):
+> systeemobjecten zoals `taskTarget` weigeren `upsertObjectPermissions` ("Cannot add object
+> permission on system object"), maar erven van het object waar ze aan hangen — een `task`-grant
+> is dus genoeg om een taak aan een bedrijf te koppelen. En een geweigerde schrijfactie komt
+> terug als **HTTP 400 met `code: PERMISSION_DENIED`**, niet als 403; wie op 403 test, denkt dat
+> het mocht.
 
 ## Lezen
 

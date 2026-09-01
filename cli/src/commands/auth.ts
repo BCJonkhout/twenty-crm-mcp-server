@@ -8,7 +8,7 @@
 
 import {
   createApiKey, decodeTokenClaims, describeRolePower, generateApiKeyToken,
-  isReadOnlyRole, listApiKeys, listRoles, revokeApiKey,
+  isReadOnlyRole, listApiKeys, listObjectNames, listRoles, revokeApiKey, writableObjects,
   type ApiKeyRecord, type GraphQLTransport, type Role,
 } from "../auth-api.ts";
 import { maskSecret, type CredentialsFile, type Profile, type ResolvedCredentials } from "../config.ts";
@@ -78,9 +78,17 @@ export function planCreate(
 
   let privilegeWarning: string | null = null;
   if (role && !isReadOnlyRole(role)) {
-    privilegeWarning =
-      `Role '${role.label}' is NOT read-only: ${describeRolePower(role)}. ` +
-      `Anyone holding this key can change or delete production CRM data.`;
+    const scoped = writableObjects(role);
+    const workspaceWide = role.canUpdateAllObjectRecords || role.canSoftDeleteAllObjectRecords
+      || role.canDestroyAllObjectRecords || role.canUpdateAllSettings;
+    // A key that may only touch `task` is a different animal from an Admin key,
+    // and saying "can change or delete production CRM data" about both trains
+    // the reader to skip the warning. Say which one it is.
+    privilegeWarning = workspaceWide
+      ? `Role '${role.label}' is NOT read-only: ${describeRolePower(role)}. `
+        + `Anyone holding this key can change or delete production CRM data.`
+      : `Role '${role.label}' reads everything and writes ${scoped.map((o) => o.verbs.join("+")).join(", ")} `
+        + `on ${scoped.length} object(s). Anyone holding this key can change those records in production.`;
   }
 
   return {
@@ -182,25 +190,39 @@ export async function runRoles(transport: GraphQLTransport): Promise<Role[]> {
   return listRoles(transport);
 }
 
-export function renderRoles(roles: readonly Role[]): string {
+export async function runObjectNames(transport: GraphQLTransport): Promise<Map<string, string>> {
+  return listObjectNames(transport);
+}
+
+export function renderRoles(roles: readonly Role[], names?: ReadonlyMap<string, string>): string {
   const lines = ["Roles in this CATO workspace:", ""];
   for (const role of roles) {
     lines.push(
       `${role.label}`,
       `  id               ${role.id}`,
       `  api-key usable   ${role.canBeAssignedToApiKeys ? "yes" : "NO"}`,
-      `  powers           ${describeRolePower(role)}`,
+      `  powers           ${describeRolePower(role, names)}`,
       `  read-only        ${isReadOnlyRole(role) ? "yes" : "no"}`,
       "",
     );
   }
-  const readOnlyAssignable = roles.filter((r) => r.canBeAssignedToApiKeys && isReadOnlyRole(r));
-  if (readOnlyAssignable.length === 0) {
+  const assignable = roles.filter((r) => r.canBeAssignedToApiKeys);
+  const leastPrivilege = assignable.filter(
+    (r) => r.canReadAllObjectRecords && !r.canUpdateAllObjectRecords
+      && !r.canSoftDeleteAllObjectRecords && !r.canDestroyAllObjectRecords && !r.canUpdateAllSettings,
+  );
+  if (leastPrivilege.length === 0) {
     lines.push(
-      "!! No read-only role can currently be attached to an API key.",
-      "   Every key issued today therefore also grants WRITE access.",
+      "!! Every role that can be attached to an API key also grants workspace-wide WRITE.",
       "   Fix: create a role with canReadAllObjectRecords=true, all update/delete/settings",
-      "   flags false, and canBeAssignedToApiKeys=true, then issue the key against it.",
+      "   flags false, and canBeAssignedToApiKeys=true; then grant writes per object with",
+      "   upsertObjectPermissions (system objects such as taskTarget reject that call, but",
+      "   inherit from the object they hang off — a `task` grant is enough to link a task).",
+    );
+  } else {
+    lines.push(
+      `Least-privilege option for a new key: ${leastPrivilege.map((r) => `'${r.label}'`).join(", ")}.`,
+      "Prefer that over Admin unless the key genuinely needs workspace-wide write.",
     );
   }
   return lines.join("\n");

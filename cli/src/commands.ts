@@ -16,6 +16,7 @@ export const COMMAND_TREE: Record<string, readonly string[]> = {
   tasks: ["list", "get", "search", "create", "update", "complete", "done", "claim", "park", "comment", "comments", "delete"],
   segments: ["build"],
   import: [],
+  guide: [],
   auth: ["create", "set", "list", "revoke", "status", "whoami", "roles"],
   marketing: [
     // read
@@ -346,6 +347,7 @@ export const COMMAND_SUMMARIES: Record<string, string> = {
   "marketing crm-picker": "CRM picker options (companies/people for selection).",
   "marketing assets": "list | create | update — templates, sender profiles, rule packs.",
   "marketing tracking-simulate": "Simulate tracking events for a campaign (testing only).",
+  "guide": "How a coding agent should drive this CLI: credentials, the write gate, and the task-board loop.",
   "auth create": "Create an API key in CATO and print the token once. Needs --no-dry-run --yes.",
   "auth set": "Store a key/token in a local profile (~/.config/cato/credentials.json, 0600).",
   "auth list": "List API keys in the workspace (never the key material).",

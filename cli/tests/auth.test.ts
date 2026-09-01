@@ -3,7 +3,10 @@ import {
   applyProfile, AuthError, buildStatus, defaultExpiry, executeCreate, executeRevoke,
   normalizeExpiry, planCreate, renderCreateDryRun, renderCreatedKey, renderRoles,
 } from "../src/commands/auth.ts";
-import { decodeTokenClaims, isReadOnlyRole, type GraphQLTransport, type Role } from "../src/auth-api.ts";
+import {
+  decodeTokenClaims, describeRolePower, isReadOnlyRole, writableObjects,
+  type GraphQLTransport, type Role,
+} from "../src/auth-api.ts";
 import { maskSecret, resolveCredentials, type CredentialsFile } from "../src/config.ts";
 
 // Roles as they really are in the CATO workspace today (verified 2026-07-30).
@@ -27,6 +30,19 @@ const READ_ONLY: Role = {
   canSoftDeleteAllObjectRecords: false,
   canDestroyAllObjectRecords: false,
   canUpdateAllSettings: false,
+};
+// The role that actually carries the agent/QA keys (created 2026-09-01): read
+// everything workspace-wide, write nothing workspace-wide, and a per-object
+// grant on task + comment. Every workspace-wide flag is identical to READ_ONLY,
+// so this fixture is exactly the case the old flag-only logic got wrong.
+const TASK_WRITER: Role = {
+  ...READ_ONLY,
+  id: "0a7eba3e-b6d5-45f2-ba20-c0ca4181b776",
+  label: "Agent — lezen + taken",
+  objectPermissions: [
+    { objectMetadataId: "task-id", canReadObjectRecords: true, canUpdateObjectRecords: true, canSoftDeleteObjectRecords: false, canDestroyObjectRecords: false },
+    { objectMetadataId: "comment-id", canReadObjectRecords: true, canUpdateObjectRecords: true, canSoftDeleteObjectRecords: false, canDestroyObjectRecords: false },
+  ],
 };
 
 /** Records every call so we can assert that a dry run made none. */
@@ -147,14 +163,67 @@ describe("create/revoke against a mocked CATO", () => {
 });
 
 describe("renderRoles", () => {
-  it("flags that no read-only role can be attached to an API key", () => {
+  it("flags that every assignable role grants workspace-wide write", () => {
     const text = renderRoles([ADMIN, MEMBER]);
-    expect(text).toContain("No read-only role can currently be attached to an API key");
-    expect(text).toContain("also grants WRITE access");
+    expect(text).toContain("Every role that can be attached to an API key also grants workspace-wide WRITE");
   });
 
-  it("stays quiet once a read-only assignable role exists", () => {
-    expect(renderRoles([ADMIN, READ_ONLY])).not.toContain("No read-only role can currently");
+  it("points at the least-privilege role once one exists", () => {
+    const text = renderRoles([ADMIN, TASK_WRITER]);
+    expect(text).not.toContain("Every role that can be attached to an API key also grants");
+    expect(text).toContain("Least-privilege option for a new key: 'Agent — lezen + taken'");
+  });
+
+  it("names the objects a scoped role can write instead of printing raw ids", () => {
+    const names = new Map([["task-id", "task"], ["comment-id", "comment"]]);
+    const text = renderRoles([TASK_WRITER], names);
+    expect(text).toContain("read-all, write:task, write:comment");
+    expect(text).not.toContain("task-id");
+  });
+
+  it("falls back to ids when the object names could not be fetched", () => {
+    expect(renderRoles([TASK_WRITER])).toContain("write:task-id");
+  });
+});
+
+describe("describeRolePower", () => {
+  it("no longer calls a role with per-object grants 'scoped/none'", () => {
+    // Regression: the Sales Rep role writes five objects and was rendered as
+    // "scoped/none", i.e. the output claimed it could do nothing.
+    const salesRep: Role = {
+      ...READ_ONLY, id: "sales-rep", label: "Sales Rep", canReadAllObjectRecords: false,
+      objectPermissions: [
+        { objectMetadataId: "person-id", canReadObjectRecords: true, canUpdateObjectRecords: true, canSoftDeleteObjectRecords: false, canDestroyObjectRecords: false },
+      ],
+    };
+    expect(describeRolePower(salesRep)).not.toBe("scoped/none");
+    expect(describeRolePower(salesRep, new Map([["person-id", "person"]]))).toBe("write:person");
+  });
+
+  it("still says scoped/none for a role that really can do nothing", () => {
+    expect(describeRolePower({ ...READ_ONLY, canReadAllObjectRecords: false })).toBe("scoped/none");
+  });
+
+  it("reports delete and destroy grants separately from write", () => {
+    const destroyer: Role = {
+      ...READ_ONLY,
+      objectPermissions: [
+        { objectMetadataId: "task-id", canReadObjectRecords: true, canUpdateObjectRecords: true, canSoftDeleteObjectRecords: true, canDestroyObjectRecords: true },
+      ],
+    };
+    expect(describeRolePower(destroyer, new Map([["task-id", "task"]]))).toContain("write+delete+destroy:task");
+  });
+});
+
+describe("writableObjects", () => {
+  it("ignores a read-only per-object grant", () => {
+    const readGrant: Role = {
+      ...READ_ONLY,
+      objectPermissions: [
+        { objectMetadataId: "task-id", canReadObjectRecords: true, canUpdateObjectRecords: false, canSoftDeleteObjectRecords: false, canDestroyObjectRecords: false },
+      ],
+    };
+    expect(writableObjects(readGrant)).toEqual([]);
   });
 });
 
@@ -166,6 +235,15 @@ describe("isReadOnlyRole", () => {
   });
   it("is true only for read-all + nothing else", () => {
     expect(isReadOnlyRole(READ_ONLY)).toBe(true);
+  });
+  it("is false for a role that writes through a per-object grant", () => {
+    // Every workspace-wide flag on TASK_WRITER matches READ_ONLY, so this is
+    // false only if the per-object grants are actually consulted.
+    expect(isReadOnlyRole(TASK_WRITER)).toBe(false);
+  });
+  it("treats a missing objectPermissions field as no grants", () => {
+    expect(isReadOnlyRole({ ...READ_ONLY, objectPermissions: undefined })).toBe(true);
+    expect(isReadOnlyRole({ ...READ_ONLY, objectPermissions: null })).toBe(true);
   });
 });
 

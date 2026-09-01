@@ -18,6 +18,20 @@
 
 ---
 
+> ### 📟 Looking for the `cato` CLI?
+>
+> This repository also ships **`cato`**, a command line interface over the same client core.
+> At PrudAI that is the half we actually use day to day; the MCP server below is the upstream
+> project it was forked from.
+>
+> ```sh
+> curl -fsSL https://raw.githubusercontent.com/BCJonkhout/twenty-crm-mcp-server/main/install.sh | bash
+> ```
+>
+> Then `cato guide` (for coding agents) or [`cli/README.md`](cli/README.md) for the full reference.
+
+---
+
 ## ✨ Features
 
 <table>

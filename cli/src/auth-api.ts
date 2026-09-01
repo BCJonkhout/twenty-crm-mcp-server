@@ -17,6 +17,14 @@ export type GraphQLTransport = (
   variables: Record<string, unknown>,
 ) => Promise<Record<string, unknown>>;
 
+export interface ObjectPermission {
+  objectMetadataId: string;
+  canReadObjectRecords: boolean | null;
+  canUpdateObjectRecords: boolean | null;
+  canSoftDeleteObjectRecords: boolean | null;
+  canDestroyObjectRecords: boolean | null;
+}
+
 export interface Role {
   id: string;
   label: string;
@@ -27,6 +35,13 @@ export interface Role {
   canSoftDeleteAllObjectRecords: boolean;
   canDestroyAllObjectRecords: boolean;
   canUpdateAllSettings: boolean;
+  /**
+   * Per-object grants that sit ON TOP of the workspace-wide flags above. A role
+   * can be read-only workspace-wide and still write one object — that is exactly
+   * how the agent/QA keys are scoped — so any judgement about what a role may do
+   * has to read this too. Absent on older reads; treat undefined as "none".
+   */
+  objectPermissions?: readonly ObjectPermission[] | null;
 }
 
 export interface ApiKeyRecord {
@@ -69,11 +84,37 @@ const ROLE_FIELDS = `
   canSoftDeleteAllObjectRecords
   canDestroyAllObjectRecords
   canUpdateAllSettings
+  objectPermissions {
+    objectMetadataId
+    canReadObjectRecords
+    canUpdateObjectRecords
+    canSoftDeleteObjectRecords
+    canDestroyObjectRecords
+  }
 `;
 
 export async function listRoles(transport: GraphQLTransport): Promise<Role[]> {
   const data = await transport(`query { getRoles { ${ROLE_FIELDS} } }`, {});
   return (data.getRoles ?? []) as Role[];
+}
+
+/**
+ * objectMetadataId -> nameSingular, so per-object grants can be printed by name.
+ * Best-effort: a workspace where this query is not permitted still gets its role
+ * list, just with ids instead of names.
+ */
+export async function listObjectNames(transport: GraphQLTransport): Promise<Map<string, string>> {
+  try {
+    const data = await transport(`query { objects(paging: {first: 200}) { edges { node { id nameSingular } } } }`, {});
+    const edges = (data.objects as { edges?: Array<{ node?: { id?: string; nameSingular?: string } }> } | undefined)?.edges ?? [];
+    const map = new Map<string, string>();
+    for (const edge of edges) {
+      if (edge.node?.id && edge.node.nameSingular) map.set(edge.node.id, edge.node.nameSingular);
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
 }
 
 export async function listApiKeys(transport: GraphQLTransport): Promise<ApiKeyRecord[]> {
@@ -163,23 +204,49 @@ export function decodeTokenClaims(token: string): TokenClaims | null {
   }
 }
 
-export function describeRolePower(role: Role): string {
+/** The per-object grants that let this role change something, id -> verbs. */
+export function writableObjects(role: Role): Array<{ objectMetadataId: string; verbs: string[] }> {
+  const out: Array<{ objectMetadataId: string; verbs: string[] }> = [];
+  for (const perm of role.objectPermissions ?? []) {
+    const verbs: string[] = [];
+    if (perm.canUpdateObjectRecords) verbs.push("write");
+    if (perm.canSoftDeleteObjectRecords) verbs.push("delete");
+    if (perm.canDestroyObjectRecords) verbs.push("destroy");
+    if (verbs.length) out.push({ objectMetadataId: perm.objectMetadataId, verbs });
+  }
+  return out;
+}
+
+/**
+ * `names` maps objectMetadataId -> nameSingular, so a scoped role reads as
+ * "read-all, write:task,comment" instead of a row of UUIDs. Without it the ids
+ * are printed — worse to read, but never wrong.
+ */
+export function describeRolePower(role: Role, names?: ReadonlyMap<string, string>): string {
   const powers: string[] = [];
   if (role.canReadAllObjectRecords) powers.push("read-all");
   if (role.canUpdateAllObjectRecords) powers.push("WRITE-all");
   if (role.canSoftDeleteAllObjectRecords) powers.push("DELETE-all");
   if (role.canDestroyAllObjectRecords) powers.push("DESTROY-all");
   if (role.canUpdateAllSettings) powers.push("ALL-SETTINGS");
+  for (const { objectMetadataId, verbs } of writableObjects(role)) {
+    powers.push(`${verbs.join("+")}:${names?.get(objectMetadataId) ?? objectMetadataId}`);
+  }
   return powers.length ? powers.join(", ") : "scoped/none";
 }
 
-/** True only for a role that can read everything and change nothing. */
+/**
+ * True only for a role that can read everything and change nothing — including
+ * through a per-object grant. Getting this wrong would print "read-only yes"
+ * next to a key that can write, which is the one lie this command must not tell.
+ */
 export function isReadOnlyRole(role: Role): boolean {
   return (
     role.canReadAllObjectRecords &&
     !role.canUpdateAllObjectRecords &&
     !role.canSoftDeleteAllObjectRecords &&
     !role.canDestroyAllObjectRecords &&
-    !role.canUpdateAllSettings
+    !role.canUpdateAllSettings &&
+    writableObjects(role).length === 0
   );
 }

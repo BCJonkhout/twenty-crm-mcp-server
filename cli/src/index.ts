@@ -11,7 +11,7 @@ import {
   flagBool, flagList, flagNumber, flagString, parseArgs, resolveWriteGate, type FlagValue,
 } from "./args.ts";
 import { COMMAND_TREE, flagSpecsFor } from "./commands.ts";
-import { commandHelp, topLevelHelp, VERSION } from "./help.ts";
+import { agentGuide, commandHelp, topLevelHelp, VERSION } from "./help.ts";
 import {
   credentialsPath, readCredentials, readKeyFromOpenBao, resolveCredentials,
   writeCredentials, type ResolvedCredentials,
@@ -150,6 +150,9 @@ async function main(argv: string[]): Promise<number> {
       return runSegments(parsed.flags, ctx);
     case "import":
       return runImport(parsed.flags, ctx);
+    case "guide":
+      out(agentGuide());
+      return 0;
     case "auth":
       return runAuth(sub!, parsed.positionals, parsed.flags, ctx);
     case "marketing":
@@ -766,7 +769,9 @@ async function runAuth(
 
   if (sub === "roles") {
     const roles = await auth.runRoles(transport);
-    out(ctx.json ? JSON.stringify(roles, null, 2) : auth.renderRoles(roles));
+    // Names only matter for the human table; --json already carries the ids.
+    const names = ctx.json ? undefined : await auth.runObjectNames(transport);
+    out(ctx.json ? JSON.stringify(roles, null, 2) : auth.renderRoles(roles, names));
     return 0;
   }
 
