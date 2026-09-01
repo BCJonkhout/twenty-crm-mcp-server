@@ -1,3 +1,9 @@
+> **Archived.** This fork is no longer developed. The `cato` CLI that lived in `cli/`
+> has moved into PrudAI's own repository, alongside the CRM it talks to; the MCP server
+> below was never used at PrudAI. Nothing here is maintained — it is kept online so the
+> fork history and the upstream link stay intact. For the upstream project, see
+> [mhenry3164/twenty-crm-mcp-server](https://github.com/mhenry3164/twenty-crm-mcp-server).
+
 <div align="center">
 
 # 🤖 Twenty CRM MCP Server
@@ -17,18 +23,6 @@
 </div>
 
 ---
-
-> ### 📟 Looking for the `cato` CLI?
->
-> This repository also ships **`cato`**, a command line interface over the same client core.
-> At PrudAI that is the half we actually use day to day; the MCP server below is the upstream
-> project it was forked from.
->
-> ```sh
-> curl -fsSL https://raw.githubusercontent.com/BCJonkhout/twenty-crm-mcp-server/main/install.sh | bash
-> ```
->
-> Then `cato guide` (for coding agents) or [`cli/README.md`](cli/README.md) for the full reference.
 
 ---
 
