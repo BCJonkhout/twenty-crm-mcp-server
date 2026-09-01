@@ -41,8 +41,22 @@ export const TASK_STATUS_VALUES = ["INBOX", "TODO", "IN_PROGRESS", "IN_REVIEW", 
 // opportunity stage): they are filter/write values on stable config, and a typo
 // that silently matched nothing would misreport the board.
 
-/** SELECT `board` on task — which board the card lives on. */
-export const TASK_BOARD_VALUES = ["PRUDAI", "PRODUCT"] as const;
+/**
+ * SELECT `board` on task — which board the card lives on.
+ *
+ * The six boards Beau and Geert settled on in the 2026-08-31 doorloop, in the
+ * order they agreed and in the order the CATO dropdown shows them: MARKETING,
+ * SALES, IMPLEMENTATION, CUSTOMERS, PRODUCT, OPERATIONS. `PRODUCT` keeps its
+ * value — renaming it would strand the 178 cards on it, the 92 in IN_REVIEW
+ * (Beau's test queue) most of all — and only its label became
+ * "Productontwikkeling". `PRUDAI` is the pre-split operations board: it is
+ * being emptied onto the five new boards and stays here until its count is
+ * demonstrably 0 and Beau says it can go, so a stray card is never orphaned.
+ * Measured against the live field metadata on 2026-09-01.
+ */
+export const TASK_BOARD_VALUES = [
+  "MARKETING", "SALES", "IMPLEMENTATION", "CUSTOMERS", "PRODUCT", "OPERATIONS", "PRUDAI",
+] as const;
 
 /** MULTI_SELECT `labels` on task. */
 export const TASK_LABEL_VALUES = ["DISCUSS_TOGETHER", "BUG", "IMPROVEMENT", "FEATURE_REQUEST", "RESEARCH"] as const;

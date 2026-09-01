@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
-  buildTaskFilter, FilterError, isKnownTaskStatus, normaliseTaskStatus, TASK_STATUS_VALUES,
+  buildTaskFilter, FilterError, isKnownTaskStatus, normaliseTaskStatus,
+  TASK_BOARD_VALUES, TASK_STATUS_VALUES,
 } from "../src/filters.ts";
 import { planList } from "../src/commands/records.ts";
 import { parseArgs, resolveWriteGate } from "../src/args.ts";
@@ -98,6 +99,26 @@ describe("buildTaskFilter", () => {
     expect(f).toContain('priority[eq]:"HIGH"');
     expect(f).toContain('source[eq]:"AGENT"');
     expect(f).toContain("labels[containsAny]:[BUG,FEATURE_REQUEST]");
+  });
+
+  // The six boards Beau and Geert settled on in the 2026-08-31 doorloop, plus
+  // the legacy PRUDAI board that is being emptied onto them. The CLI is the
+  // gate: until this list carries a board, no agent, cron or skill can write to
+  // it, so it must track the live field metadata exactly.
+  it("knows the six boards in the agreed order, and still the legacy PRUDAI", () => {
+    expect([...TASK_BOARD_VALUES]).toEqual([
+      "MARKETING", "SALES", "IMPLEMENTATION", "CUSTOMERS", "PRODUCT", "OPERATIONS", "PRUDAI",
+    ]);
+    for (const board of TASK_BOARD_VALUES) {
+      expect(buildTaskFilter({ board })).toContain(`board[eq]:"${board}"`);
+    }
+  });
+
+  // PRODUCT keeps its value — only its label became "Productontwikkeling".
+  // Renaming it would strand 178 cards, 92 of them in Beau's IN_REVIEW queue.
+  it("keeps PRODUCT and PRUDAI spelled exactly as the live enum does", () => {
+    expect(buildTaskFilter({ board: "product" })).toContain('board[eq]:"PRODUCT"');
+    expect(buildTaskFilter({ board: "prudai" })).toContain('board[eq]:"PRUDAI"');
   });
 
   // These four ARE enforced, unlike --status: a typo that silently matched
@@ -724,6 +745,11 @@ describe("task board fields", () => {
 
   it("refuses unknown values and a relative source link — CATO's 400 is not the first line of defence", () => {
     expect(() => buildTaskBody({ title: "t", board: "TRELLO" })).toThrow(/--board/);
+    // Every board the filter accepts must also be writable, or a card can be
+    // found on a board but never created there.
+    for (const board of TASK_BOARD_VALUES) {
+      expect(buildTaskBody({ title: "t", board: board.toLowerCase() })).toMatchObject({ board });
+    }
     expect(() => buildTaskBody({ title: "t", labels: ["URGENT"] })).toThrow(RecordWriteError);
     expect(() => buildTaskBody({ title: "t", betrokkenen: ["YME"] })).toThrow(/BEAU, GEERT, BAS, ROLAND, CODEX/);
     expect(() => buildTaskBody({ title: "t", sourceLink: "sharepoint/verslag" })).toThrow(/absolute URL/);

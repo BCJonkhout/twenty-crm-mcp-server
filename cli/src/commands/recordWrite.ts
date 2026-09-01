@@ -60,7 +60,7 @@ export interface TaskFlags {
   /** Already an ISO timestamp — see parseDueAt in commands/tasks.ts. */
   dueAt?: string;
   assigneeId?: string;
-  /** SELECT PRUDAI | PRODUCT. Required on create. */
+  /** SELECT — one of TASK_BOARD_VALUES (the six boards + the legacy PRUDAI). Required on create. */
   board?: string;
   /** MULTI_SELECT; a write replaces the whole set. */
   labels?: string[];
